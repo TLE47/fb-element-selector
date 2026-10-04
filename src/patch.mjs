@@ -250,6 +250,24 @@ function revert() {
   if (!existsSync(BACKUP)) throw new Error(`no backup in ${BACKUP}`)
   const saved = path.join(BACKUP, 'index.html')
   if (existsSync(saved)) {
+    // Guard against restoring a backup that references assets which do not exist. A poisoned
+    // index.html in the backup is self-perpetuating: --revert copies it straight back, so the
+    // app is left pointing at a renderer that was never written. This is not hypothetical - it
+    // happened here, and it silently undid a manual repair on the next revert.
+    const want = [unrenamed(JS_FILE), unrenamed(CSS_FILE)].map((f) => path.basename(f))
+    const backupHtml = readFileSync(saved, 'utf8')
+    const missing = want.filter((f) => backupHtml.includes(f) === false)
+    const alien = [...backupHtml.matchAll(/assets\/index-[\w-]+\.(?:js|css)/g)]
+      .map((m) => m[0])
+      .filter((ref) => !want.some((f) => ref.endsWith(f)))
+    if (missing.length || alien.length) {
+      throw new Error(
+        `refusing to restore ${saved}: it does not reference the real assets.\n` +
+          `  missing: ${missing.join(', ') || 'none'}\n` +
+          `  unknown: ${[...new Set(alien)].join(', ') || 'none'}\n` +
+          '  restoring it would leave the app pointing at files that do not exist',
+      )
+    }
     copyFileSync(saved, INDEX_HTML)
     console.error(`restored ${INDEX_HTML}`)
   }

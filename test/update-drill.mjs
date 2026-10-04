@@ -211,6 +211,43 @@ try {
   ok('drill: the installed app index.html was not modified', readFileSync(realIndexHtml, 'utf8') === realIndexBefore)
   ok('drill: the real backup directory was not modified', readdirSync(realBackupDir).sort().join(',') === realBackupBefore)
 
+  // 11. --revert must REFUSE a backup whose index.html points at assets that do not exist. Such
+  //     a backup is self-perpetuating: revert copies it straight back, so the app is left serving
+  //     a renderer that was never written. This actually happened here - a poisoned backup
+  //     silently undid a manual repair on the next revert - so it is worth a hard failure.
+  {
+    const poisonDir = mkdtempSync(path.join(os.tmpdir(), 'fb-es-poison-'))
+    const poisonAssets = path.join(poisonDir, 'assets')
+    const poisonBackup = path.join(poisonDir, 'backup')
+    mkdirSync(poisonAssets, { recursive: true })
+    mkdirSync(poisonBackup, { recursive: true })
+    cpSync(path.join(BACKUP, pristineJs), path.join(poisonAssets, 'index-POISON1.js'))
+    cpSync(path.join(BACKUP, pristineCss), path.join(poisonAssets, 'index-POISON1.css'))
+    // A healthy app to begin with: index.html points at the assets that actually exist.
+    writeFileSync(
+      path.join(poisonDir, 'index.html'),
+      '<link rel="stylesheet" href="/assets/index-POISON1.css"><script type="module" src="/assets/index-POISON1.js">',
+    )
+    const env2 = { ...process.env, FREEBUFF_PATCH_BACKUP: poisonBackup, ASSETS: poisonAssets }
+    const appHtmlPath = path.join(poisonDir, 'index.html')
+    // Patch for real, so the app is healthy and correctly renamed.
+    execFileSync(process.execPath, ['--experimental-vm-modules', '--no-warnings', patcher], { env: env2, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+    const patchedHtml = readFileSync(appHtmlPath, 'utf8')
+    ok('drill: the staged app points at renamed assets before any revert', patchedHtml.includes('index-POISON1-fb-inspect.js'), patchedHtml.match(/assets\/index-[^"']+/)?.[0])
+    // Now poison the BACKUP, which is how the real incident arose: a staged run overwrote it.
+    writeFileSync(path.join(poisonBackup, 'index.html'), '<link rel="stylesheet" href="/assets/index-GHOST1.css"><script type="module" src="/assets/index-GHOST1.js">')
+    let poisonErr = null
+    try {
+      execFileSync(process.execPath, ['--experimental-vm-modules', '--no-warnings', patcher, '--revert'], { env: env2, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+    } catch (error) {
+      poisonErr = `${error.status}:${error.stderr || ''}`
+    }
+    ok('drill: --revert refuses a backup pointing at non-existent assets', !!poisonErr && /refusing to restore/.test(poisonErr), (poisonErr || 'it reverted silently').slice(0, 90))
+    ok('drill: the refused revert left the app index.html untouched', readFileSync(appHtmlPath, 'utf8') === patchedHtml)
+    ok('drill: and it still points at the real asset, not the ghost one', readFileSync(appHtmlPath, 'utf8').includes('index-POISON1-fb-inspect.js') && !readFileSync(appHtmlPath, 'utf8').includes('GHOST'))
+    rmSync(poisonDir, { recursive: true, force: true })
+  }
+
   // 10. The entry-point guard must work from a SYMLINKED path. On macOS /var is a symlink to
   //     /private/var, so `mktemp -d` hands out a path that differs from import.meta.url. When
   //     the guard compared them verbatim, main() never ran and the script exited 0 having done
