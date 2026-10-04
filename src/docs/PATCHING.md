@@ -294,11 +294,23 @@ and resolves inside `main()`, so the failure is a one-line message and exit 2.
 117 checks, all of which run against the **shipped bytes** rather than a copy that could drift
 from them.
 
+The npm manifest lives in `src/`, next to the code it describes, so the dev dependencies install
+there too. From a fresh clone:
+
 ```sh
+cd src
+npm install
 npm test              # 44 behaviour checks, jsdom + real React 19
 npm run test:update   # 38 durability checks against a simulated app update
 npm run test:fallback # 35 checks that tier 2 mounts, picks, and announces a failed mount
 npm run test:all      # all three
+```
+
+Or skip npm entirely — this needs no prior state and never reads the installed app, which is why
+it is the one to trust in CI:
+
+```sh
+bash src/test/run-isolated.sh
 ```
 
 `npm test` lifts the inspector out of the bundle verbatim, so it exercises the code that actually
@@ -325,7 +337,7 @@ bytes to stage a fake release from, and there are none. Use the isolated runner,
 own pristine copy and needs no prior state:
 
 ```sh
-bash src/src/test/run-isolated.sh    # all three suites, from untouched bytes; works on a fresh clone
+bash src/test/run-isolated.sh    # all three suites, from untouched bytes; works on a fresh clone
 ```
 
 That runner is the one to trust in CI: it never reads the installed app, so its result is the same

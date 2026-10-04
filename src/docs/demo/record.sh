@@ -1,7 +1,7 @@
 #!/bin/bash
 # record.sh — turn a raw screen recording into the README's demo clip.
 #
-#   docs/demo/record.sh "~/Movies/Screen Recording ....mov"
+#   src/docs/demo/record.sh "~/Movies/Screen Recording ....mov"
 #
 # One ffmpeg pass decodes the capture, drops the dead air before the action, decimates the frame
 # rate and scales it down; it lands PNG frames, and those frames are the master. img2webp then
@@ -10,7 +10,7 @@
 #
 # Why 8 fps and 1100 px: the source is a 600 fps screen capture, so almost every frame is a
 # duplicate of its neighbour, and the clip is ~40 s of a mostly-dark UI. Those two numbers are
-# where the size lives - see docs/demo/README.md.
+# where the size lives - see src/docs/demo/README.md.
 #
 # The whole window is kept. A crop to the inspector's half of the window was tried and made the
 # file BIGGER (6.4 MB against 3.5 MB): cropping away the dark sidebar forced a larger downscale
