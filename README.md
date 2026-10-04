@@ -5,7 +5,7 @@
 [![Node 20+](https://img.shields.io/badge/node-20%2B-brightgreen)](#installation)
 [![Platform: macOS](https://img.shields.io/badge/platform-macOS-lightgrey)](#installation)
 [![No dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)](#installation)
-[![Tests: 99](https://img.shields.io/badge/tests-99-passing-brightgreen)](#tests)
+[![Tests: 113](https://img.shields.io/badge/tests-113-passing-brightgreen)](#tests)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](https://github.com/TLE47/fb-element-selector/blob/main/LICENSE)
 
 A DevTools-style element inspector for the [Freebuff](https://freebuff.com) desktop app. It adds a
@@ -116,7 +116,7 @@ Full detail, including the traps that cost real debugging time here, is in
 ```sh
 npm test              # 44 behaviour checks, jsdom + real React 19
 npm run test:update   # 35 durability checks against a simulated app update
-npm run test:fallback # 20 checks that tier 2 mounts and picks, on a renumbered bundle
+npm run test:fallback # 34 checks that tier 2 mounts, picks, and announces a failed mount
 ```
 
 `npm test` lifts the inspector out of the **shipped bundle verbatim**, so it exercises the bytes
@@ -132,7 +132,9 @@ breakage stays quiet, a *different* moved anchor notifies again, and recovery an
 `npm run test:fallback` proves tier 2 on its own terms: it renumbers the bundle (`nU`→`fbq0`,
 `d`→`fbq1`, `le`→`fbq2`) to defeat every tier-1 anchor, then drives the fallback in jsdom — it
 mounts left of the `+`, arms, outlines, picks without activating the element, resolves a selector,
-copies it, and cancels on Escape.
+copies it, and cancels on Escape. It also drives the **failure** path: a document whose panel
+markup does not match must produce a visible notice, a `<html>` marker, a console error and a
+working dismiss — while a document that *does* match must produce no notice at all.
 
 Both suites read the installed app, so run them after patching. **On a fresh clone with nothing
 patched yet, `npm run test:update` exits 2 with an explanation** — it needs the pristine pre-patch
@@ -151,6 +153,7 @@ bash test/run-isolated.sh    # all three suites, from untouched bytes; works on 
 |---|---|
 | No magnifier in the tab strip | Not patched, or not reloaded: `node src/patch.mjs --check`, then reload |
 | Notification says "running in fallback mode" | An update renumbered the bundle. The inspector works as plain DOM; re-anchor `EDITS` for the React version |
+| A notice says the inspector could not mount | Freebuff's panel markup changed again, so tier 2's host selector missed. Re-anchor `DOMFALLBACK` in `src/patch.mjs` — `<html data-fb-inspect-failed>` stays set even if you dismiss it |
 | The magnifier looks a little different than the demo | That is what fallback mode looks like — no hover hint styling, a text `✕` instead of the app's icon |
 | `--check` exits **3** | The patched bundle would not parse, so nothing was written. The app is untouched |
 | `--check` exits **2** | The patcher could not run — no app, no entry bundle, or `--revert` with nothing to restore. The message says which |

@@ -319,8 +319,14 @@ export const DOMFALLBACK =
   // Mount beside the panel launcher's "+". That button is found by its class and its aria-label,
   // which are SOURCE strings - they survive minification, which is the entire reason this tier
   // exists. A MutationObserver covers the panel appearing after load.
+  //
+  // And when it NEVER appears, that has to be said out loud. This is the one failure the patcher
+  // cannot see: a bundle that parses cleanly falls through both tiers and exits 0, so exit codes,
+  // the log and the notification are all silent while the button simply is not there. The renderer
+  // has no channel back to ensure.sh, so the signal has to be drawn in the app itself.
   `(function fbInspDom(){` +
   `var wrap=null;` +
+  `var LIMIT=typeof FB_INSP_MOUNT_TIMEOUT==="number"?FB_INSP_MOUNT_TIMEOUT:60000;` +
   `function host(){return document.querySelector('button.panel-add[aria-label="Open panel tab"]')}` +
   `function tryMount(){` +
   `if(wrap&&wrap.isConnected)return true;` +
@@ -329,10 +335,32 @@ export const DOMFALLBACK =
   `wrap=fbInspUi();` +
   `b.parentNode.insertBefore(wrap,b);` +
   `return true}` +
+  `function announce(){` +
+  `if(document.querySelector("div[data-fb-inspect-failed]"))return;` +
+  // On the root element as well, so the state is inspectable from devtools without the notice
+  // having been dismissed - a dismissed notice must not become a silent failure again.
+  `document.documentElement.setAttribute("data-fb-inspect-failed","");` +
+  `console.error("fb-element-selector: the inspector did not mount - no "+` +
+  `'button.panel-add[aria-label="Open panel tab"]'+" appeared within "+LIMIT+` +
+  `"ms. Freebuff's panel markup changed; DOMFALLBACK in src/patch.mjs needs re-anchoring.");` +
+  `if(!document.body)return;` +
+  `var el=document.createElement("div");` +
+  `el.setAttribute("data-fb-inspect-failed","");` +
+  `el.className="fb-inspect-failed";` +
+  `el.setAttribute("role","status");` +
+  `var t=document.createElement("span");` +
+  `t.textContent="Element inspector could not mount - Freebuff's panel layout changed.";` +
+  `var x=document.createElement("button");` +
+  `x.type="button";x.className="fb-inspect-failed-x";x.title="Dismiss";` +
+  `x.setAttribute("aria-label","Dismiss this notice");x.textContent="✕";` +
+  `x.addEventListener("click",function(){el.remove()});` +
+  `el.appendChild(t);el.appendChild(x);` +
+  `document.body.appendChild(el)}` +
   `function start(){if(tryMount())return;` +
   `var mo=new MutationObserver(function(){if(tryMount())mo.disconnect()});` +
   `mo.observe(document.documentElement,{childList:true,subtree:true});` +
-  `window.setTimeout(function(){mo.disconnect()},60000)}` +
+  `window.setTimeout(function(){mo.disconnect();` +
+  `if(!wrap||!wrap.isConnected)announce()},LIMIT)}` +
   `if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",start);else start()})()`
 
 // Each edit: an anchor that must exist exactly once, and the text that replaces it.
@@ -372,7 +400,12 @@ export const CSS =
   `.fb-inspect-status.ok{color:var(--accent)}` +
   `.fb-inspect-status.fail{color:var(--danger)}` +
   `.fb-inspect-copy{flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:22px;height:22px;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--muted);cursor:pointer}` +
-  `.fb-inspect-copy:hover{background:var(--raised);color:var(--text)}`
+  `.fb-inspect-copy:hover{background:var(--raised);color:var(--text)}` +
+  // The failure notice. Bottom-corner so it cannot be confused with the tab strip, and it has to
+  // read as a notice rather than a control - the user cannot act on it, only dismiss it.
+  `.fb-inspect-failed{position:fixed;right:16px;bottom:16px;z-index:2147483647;display:flex;align-items:center;gap:var(--space-2);max-width:min(420px,80vw);padding:8px 10px;border:1px solid var(--danger);border-radius:var(--radius-sm);background:var(--surface);box-shadow:0 8px 24px rgba(0,0,0,.28);color:var(--text);font-size:var(--font-size-label)}` +
+  `.fb-inspect-failed-x{flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:20px;height:20px;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--muted);cursor:pointer}` +
+  `.fb-inspect-failed-x:hover{background:var(--raised);color:var(--text)}`
 
 function backup(name, from) {
   mkdirSync(BACKUP, { recursive: true })

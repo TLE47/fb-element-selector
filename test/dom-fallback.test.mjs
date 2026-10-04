@@ -154,5 +154,71 @@ ok('tier 2 cancels when its own button is clicked', dom.window.document.querySel
 // the idempotency marker tier 2 relies on
 ok('the marker main() checks for is present in tier 2', DOMFALLBACK.includes('function fbInspDom()'))
 
+// --- 4 a failed mount announces itself -----------------------------------------------------
+// This is the case nothing else can catch. A bundle that parses cleanly falls through both tiers
+// and exits 0, so exit codes, the log and the notification are ALL silent while the button is
+// simply absent. The renderer has no channel back to ensure.sh, so tier 2 has to draw the notice
+// itself.
+ok('tier 2 has a mount deadline to give up on', DOMFALLBACK.includes('FB_INSP_MOUNT_TIMEOUT') && /setTimeout/.test(DOMFALLBACK))
+ok('tier 2 announces instead of failing silently', DOMFALLBACK.includes('announce') && DOMFALLBACK.includes('data-fb-inspect-failed'))
+
+// The happy path must NOT announce: a notice on a working install is worse than no notice. The
+// structural half of that is that announce() is only reachable from the deadline callback, guarded
+// by a not-mounted check; the behavioural half is driven for real at the end of this block.
+ok('announce is only reachable from the deadline, and only when unmounted',
+  /if\(!wrap\|\|!wrap\.isConnected\)announce\(\)/.test(DOMFALLBACK) &&
+    (DOMFALLBACK.match(/announce\(\)/g) || []).length === 2, // the definition, and the one call
+)
+
+// Drive it for real: a document whose panel markup does not match, with a short deadline.
+{
+  const dom2 = new JSDOM('<!doctype html><body><div class="panel-tabs"><button class="panel-tab" id="t1">Browser</button></div></body>', { url: 'https://localhost/' })
+  const errs = []
+  const ctx2 = vm.createContext({
+    window: dom2.window,
+    document: dom2.window.document,
+    MutationObserver: dom2.window.MutationObserver,
+    Promise,
+    console: { error: (m) => errs.push(String(m)), warn: () => {}, log: () => {} },
+    // The deadline is a bare identifier on purpose, so the test can shorten it. Absent in the
+    // real bundle, where typeof makes it fall back to 60s.
+    FB_INSP_MOUNT_TIMEOUT: 40,
+  })
+  new vm.Script(DOMFALLBACK, { filename: 'fbdom-nohost.js' }).runInContext(ctx2)
+  await new Promise((r) => setTimeout(r, 90))
+
+  const notice = dom2.window.document.querySelector('div[data-fb-inspect-failed]')
+  ok('an unmounted inspector raises a visible notice', !!notice, notice ? '' : 'no notice appeared')
+  ok('the notice says what happened', /could not mount/.test(notice?.textContent || ''), notice?.textContent?.slice(0, 60))
+  ok('the notice is announced to assistive tech', notice?.getAttribute('role') === 'status')
+  ok('the notice leaves an inspectable mark on <html>', dom2.window.document.documentElement.hasAttribute('data-fb-inspect-failed'))
+  ok('the notice also reaches the console, for devtools', errs.some((e) => /did not mount/.test(e)), errs[0]?.slice(0, 70))
+  ok('the notice offers a dismiss control', !!notice?.querySelector('button[aria-label="Dismiss this notice"]'))
+  ok('and no inspector button was mounted', dom2.window.document.querySelector('.fb-inspect-btn') === null)
+
+  // Dismissing must not resurrect the notice on the next MutationObserver tick.
+  notice?.querySelector('button')?.dispatchEvent(new dom2.window.Event('click', { bubbles: true }))
+  ok('the notice can be dismissed', dom2.window.document.querySelector('div[data-fb-inspect-failed]') === null)
+  dom2.window.document.body.appendChild(dom2.window.document.createElement('span'))
+  await new Promise((r) => setTimeout(r, 40))
+  ok('and a dismissed notice does not come back', dom2.window.document.querySelector('div[data-fb-inspect-failed]') === null)
+
+  // The happy path in the SAME harness: the host appears in time, so nothing is announced.
+  const dom3 = new JSDOM('<!doctype html><body><div class="panel-tabs"><button class="panel-add" aria-label="Open panel tab">+</button></div></body>', { url: 'https://localhost/' })
+  const errs3 = []
+  const ctx3 = vm.createContext({
+    window: dom3.window,
+    document: dom3.window.document,
+    MutationObserver: dom3.window.MutationObserver,
+    Promise,
+    console: { error: (m) => errs3.push(String(m)), warn: () => {}, log: () => {} },
+    FB_INSP_MOUNT_TIMEOUT: 40,
+  })
+  new vm.Script(DOMFALLBACK, { filename: 'fbdom-host.js' }).runInContext(ctx3)
+  await new Promise((r) => setTimeout(r, 90))
+  ok('a successful mount raises NO notice', dom3.window.document.querySelector('[data-fb-inspect-failed]') === null && errs3.length === 0)
+  ok('and the button really is mounted in that document', !!dom3.window.document.querySelector('.fb-inspect-btn'))
+}
+
 console.log(failed ? `\n${failed} check(s) failed` : '\nall checks passed')
 process.exitCode = failed ? 1 : 0

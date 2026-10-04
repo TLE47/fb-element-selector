@@ -67,13 +67,45 @@ Two consequences, both of which were bugs before they were checks:
 Dedupe then compares the **whole state string**, `fallback:$fingerprint`, not the `fallback:`
 prefix. Matching the prefix is what kept a second, differently-moved anchor silent.
 
-### What is still not solvable
+### The failure tier 2 cannot report — and now announces itself
 
 Tier 2 keys on `panel-add` and `aria-label="Open panel tab"`. If an update renames those source
-strings too — not the minified symbols, the app's own markup — both tiers fail to mount and the
-inspector is simply absent. That one needs a human, and no amount of anchoring logic reaches it.
-It is also invisible to exit codes: a bundle that parses cleanly falls through both tiers, so
-there is no failure to signal. Checking for the mount is the only way to notice.
+strings too — not the minified symbols, the app's own markup — both tiers fail to mount.
+
+That case is invisible to everything outside the renderer. A bundle that parses cleanly falls
+through both tiers and exits **0**, so `ensure.sh` writes `ok`, the notification never fires, and
+the log says everything is fine — while the button simply is not there. It needs a human, and no
+amount of anchoring logic reaches it.
+
+What can be fixed is the silence. Tier 2 gives up after a mount deadline and says so in the app
+itself:
+
+```js
+window.setTimeout(function () {
+  mo.disconnect()
+  if (!wrap || !wrap.isConnected) announce()
+}, LIMIT)
+```
+
+`announce()` draws a dismissible notice bottom-corner (`role="status"`, so it is announced rather
+than merely seen), sets `data-fb-inspect-failed` on `<html>`, and writes a `console.error`. The
+`<html>` attribute deliberately survives dismissal: a notice the user swiped away must not become
+a silent failure again, and it is what you check first when the button is missing.
+
+Three details that matter:
+
+- **Only from the deadline, and only when unmounted.** A notice on a working install is worse than
+  no notice, so `announce()` is unreachable except on that one path — and `test/dom-fallback.test.mjs`
+  drives both directions: a document with no host must notice, a document with one must not.
+- **Guarded against re-announcing.** The notice is created once; a later MutationObserver tick
+  cannot resurrect one the user dismissed.
+- **`FB_INSP_MOUNT_TIMEOUT` is read with `typeof`.** A bare identifier would throw
+  `ReferenceError` in the bundle, where it does not exist; `typeof` on an undeclared name is the
+  one form that is safe. The tests set it to shrink the deadline.
+
+The renderer has no channel back to `ensure.sh`, so this is necessarily a UI signal. If you want it
+in the log as well, the renderer would need a filesystem bridge — worth doing only if you care more
+about the log than the screen.
 
 ## The traps
 
@@ -160,6 +192,25 @@ const renumbered = real
 
 The drill now asserts that its fixture parses before using it, so it cannot quietly regress into
 testing the parse-guard path again — which is the only way this class of mistake stays fixed.
+
+### Check the precondition before you use it
+
+Three of the bugs above had the same shape: a value read at module scope, before any guard could
+run, so a missing input became a raw stack trace instead of an instruction.
+
+```js
+// throws at import, prints a Node trace, exits 1
+const pristine = readdirSync(BACKUP).find(...)
+```
+
+```js
+// says what to do next, exits 2
+if (!existsSync(BACKUP)) { console.error(...); process.exit(2) }
+const pristine = readdirSync(BACKUP).find(...)
+```
+
+The tell is a failure only a fresh clone ever hits. Test the shipped path, not just your working
+copy — cloning the repo and running the documented commands is what caught all three.
 
 ## Re-anchoring after an update
 
