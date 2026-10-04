@@ -289,3 +289,44 @@ And `entryAsset()` used to run at module scope, so a missing entry bundle threw 
 escaping `main()`'s handler as an unhandled stack trace and exiting 1: to `--check`, identical to
 "not patched", which is the one answer that means nothing is wrong. The asset lookup is now lazy
 and resolves inside `main()`, so the failure is a one-line message and exit 2.
+## Tests
+
+117 checks, all of which run against the **shipped bytes** rather than a copy that could drift
+from them.
+
+```sh
+npm test              # 44 behaviour checks, jsdom + real React 19
+npm run test:update   # 38 durability checks against a simulated app update
+npm run test:fallback # 35 checks that tier 2 mounts, picks, and announces a failed mount
+npm run test:all      # all three
+```
+
+`npm test` lifts the inspector out of the bundle verbatim, so it exercises the code that actually
+runs in the app. It uses the app's own `react/jsx-runtime` rather than `createElement`, because
+only the real one reproduces the jsx-runtime trap described above.
+
+`npm run test:update` is the interesting one. It stages a fake release — pristine bytes under a
+content hash this install has never seen — and checks the patch applies, re-anchors, stays
+idempotent, parses as an ES module, reverses byte for byte, and **falls back rather than refusing**
+when the anchors vanish. It also asserts that none of that reached the installed app or its backup
+directory, and it exercises the notification contract: a moved anchor notifies once, the same
+breakage stays quiet, a *different* moved anchor notifies again, and recovery announces itself.
+
+`npm run test:fallback` proves tier 2 on its own terms: it renumbers the bundle (`nU`→`fbq0`,
+`d`→`fbq1`, `le`→`fbq2`) to defeat every tier-1 anchor, then drives the fallback in jsdom — it
+mounts left of the `+`, arms, outlines, picks without activating the element, resolves a selector,
+copies it, and cancels on Escape. It also drives the **failure** path in both directions: a
+document whose panel markup does not match must produce a visible notice, a `<html>` marker, a
+console error and a working dismiss — while a document that *does* match must produce no notice.
+
+Both suites read the installed app, so run them after patching. **On a fresh clone with nothing
+patched yet, `npm run test:update` exits 2 with an explanation** — it needs the pristine pre-patch
+bytes to stage a fake release from, and there are none. Use the isolated runner, which stages its
+own pristine copy and needs no prior state:
+
+```sh
+bash test/run-isolated.sh    # all three suites, from untouched bytes; works on a fresh clone
+```
+
+That runner is the one to trust in CI: it never reads the installed app, so its result is the same
+on every machine.
