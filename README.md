@@ -2,6 +2,7 @@
 
 **Click any element in the Freebuff app — get its CSS selector, already copied.**
 
+[![CI](https://github.com/TLE47/fb-element-selector/actions/workflows/ci.yml/badge.svg)](https://github.com/TLE47/fb-element-selector/actions/workflows/ci.yml)
 [![Node 20+](https://img.shields.io/badge/node-20%2B-brightgreen)](#install)
 [![macOS](https://img.shields.io/badge/platform-macOS-lightgrey)](#install)
 [![Tests: 117](https://img.shields.io/badge/tests-117-passing-brightgreen)](https://github.com/TLE47/fb-element-selector/blob/main/src/docs/PATCHING.md)
