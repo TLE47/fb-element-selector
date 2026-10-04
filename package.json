@@ -1,0 +1,30 @@
+{
+  "name": "freebuff-element-selector",
+  "version": "1.0.0",
+  "description": "A DevTools-style element inspector for the Freebuff desktop app: click the magnifier, hover any element of the app, get its CSS selector.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": ["freebuff", "electron", "inspector", "devtools", "element-picker", "css-selector"],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "patch": "node src/patch.mjs",
+    "check": "node src/patch.mjs --check",
+    "revert": "node src/patch.mjs --revert",
+    "ensure": "bash src/ensure.sh",
+    "test": "node --experimental-vm-modules test/inspector.test.mjs",
+    "test:update": "node --experimental-vm-modules test/update-drill.mjs",
+    "test:all": "npm run test:update && npm test"
+  },
+  "devDependencies": {
+    "jsdom": "^25.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ]
+}

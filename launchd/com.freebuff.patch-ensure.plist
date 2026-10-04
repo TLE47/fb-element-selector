@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Re-applies the Freebuff element-selector patch when the app changes.
+
+  __REPO__ and __HOME__ are placeholders, so this file carries no personal paths into git.
+  Substitute both when installing:
+
+    mkdir -p ~/Library/LaunchAgents
+    sed "s#__REPO__#$PWD#g; s#__HOME__#$HOME#g" launchd/com.freebuff.patch-ensure.plist \
+      > ~/Library/LaunchAgents/com.freebuff.patch-ensure.plist
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.freebuff.patch-ensure.plist
+
+  Two triggers, because they catch different events:
+    WatchPaths  an update landing while the app is already installed, mid-session
+    RunAtLoad   the first run after this is installed, and every login
+
+  The script is idempotent and verifies every anchor before writing, so a spurious trigger
+  costs one read of the bundle and changes nothing. It never needs elevation: it writes only
+  inside the user's own app bundle and its own log file.
+
+  Remove:
+    launchctl bootout gui/$(id -u)/com.freebuff.patch-ensure
+    rm ~/Library/LaunchAgents/com.freebuff.patch-ensure.plist
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.freebuff.patch-ensure</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>__REPO__/src/ensure.sh</string>
+  </array>
+  <key>WatchPaths</key>
+  <array>
+    <string>/Applications/Freebuff.app/Contents/Resources/orchestrator/ui/assets</string>
+    <string>/Applications/Freebuff.app/Contents/Info.plist</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <!-- launchd re-arms a WatchPaths agent immediately; this bounds any burst after a long sleep. -->
+  <key>ThrottleInterval</key>
+  <integer>30</integer>
+  <key>StandardOutPath</key>
+  <string>__HOME__/.fb-scratch/freebuff-element-selector.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>__HOME__/.fb-scratch/freebuff-element-selector.err.log</string>
+  <key>ProcessType</key>
+  <string>Background</string>
+</dict>
+</plist>

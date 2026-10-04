@@ -1,0 +1,9 @@
+node_modules/
+npm-debug.log*
+.DS_Store
+*.log
+.env
+.env.*
+# the plist is templated at install time; a substituted copy must never be committed
+launchd/*.local.plist
+Library/
