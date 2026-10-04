@@ -134,7 +134,7 @@ case "$status" in
     # A recovery deserves a notification too: if you were told it was broken, silence would leave
     # you not knowing to reload and check.
     case "$previous" in
-      fallback:*|broken:*)
+      fallback:*|error:*)
         say "RECOVERED: the patch anchors match again - reload the app (View > Reload App)"
         notify "Freebuff element selector recovered" \
           "The inspector is patched again as a React component on $(app_version). Reload the app to pick it up."
@@ -144,21 +144,22 @@ case "$status" in
     esac        # end of the case on $out
     ;;
   2)
-    say "ATTENTION: neither tier could be applied; nothing was written."
-    say "           Re-anchor EDITS in $PATCHER against the new bundle."
+    # NOT "the anchors moved" any more - that is tier 2's job and it exits 0. Exit 2 is the
+    # patcher failing outright: no app, no entry bundle, or --revert with nothing to restore.
+    say "ATTENTION: the patcher could not run; nothing was written."
     printf '%s\n' "$out" | while IFS= read -r line; do say "           $line"; done
     # Fingerprint the failure from the patcher's own message: identical output on a later run
     # means nothing new happened, so stay quiet.
     fingerprint="$(printf '%s\n' "$out" | cksum | cut -d' ' -f1)"
-    write_state "broken:$fingerprint"
+    write_state "error:$fingerprint"
     case "$previous" in
-      "broken:$fingerprint")
-        say "           (already notified for this exact breakage; not notifying again)"
+      "error:$fingerprint")
+        say "           (already notified for this exact failure; not notifying again)"
         ;;
       *)
         detail="$(printf '%s' "$out" | tr '\n' ' ' | cut -c1-160)"
-        notify "Freebuff element selector needs re-anchoring" \
-          "Freebuff $(app_version) moved the patch anchors; the inspector is not applied. $detail See $LOG"
+        notify "Freebuff element selector could not patch" \
+          "The patcher failed on Freebuff $(app_version); the inspector was not changed. $detail See $LOG"
         ;;
     esac
     ;;

@@ -5,7 +5,7 @@
 [![Node 20+](https://img.shields.io/badge/node-20%2B-brightgreen)](#installation)
 [![Platform: macOS](https://img.shields.io/badge/platform-macOS-lightgrey)](#installation)
 [![No dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)](#installation)
-[![Tests: 98](https://img.shields.io/badge/tests-98-passing-brightgreen)](#tests)
+[![Tests: 99](https://img.shields.io/badge/tests-99-passing-brightgreen)](#tests)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](https://github.com/TLE47/fb-element-selector/blob/main/LICENSE)
 
 A DevTools-style element inspector for the [Freebuff](https://freebuff.com) desktop app. It adds a
@@ -55,7 +55,7 @@ Then **reload the app** — `View ▸ Reload App`, or quit and reopen.
 Check or undo at any time:
 
 ```sh
-node src/patch.mjs --check    # 0 patched · 1 not patched · 2 no tier applied · 3 would not parse
+node src/patch.mjs --check    # 1 not patched · 1 already patched · 2 could not run · 3 would not parse
 node src/patch.mjs --revert   # restore the pre-patch bundle
 ```
 
@@ -115,7 +115,7 @@ Full detail, including the traps that cost real debugging time here, is in
 
 ```sh
 npm test              # 44 behaviour checks, jsdom + real React 19
-npm run test:update   # 34 durability checks against a simulated app update
+npm run test:update   # 35 durability checks against a simulated app update
 npm run test:fallback # 20 checks that tier 2 mounts and picks, on a renumbered bundle
 ```
 
@@ -150,8 +150,8 @@ bash test/run-isolated.sh
 | No magnifier in the tab strip | Not patched, or not reloaded: `node src/patch.mjs --check`, then reload |
 | Notification says "running in fallback mode" | An update renumbered the bundle. The inspector works as plain DOM; re-anchor `EDITS` for the React version |
 | The magnifier looks a little different than the demo | That is what fallback mode looks like — no hover hint styling, a text `✕` instead of the app's icon |
-| `--check` exits **2** | Neither tier could be applied and nothing was written. Re-anchor `EDITS` |
-| `--check` exits **3** | The patched bundle would not parse, so nothing was written. Check the log; the app is untouched |
+| `--check` exits **3** | The patched bundle would not parse, so nothing was written. The app is untouched |
+| `--check` exits **2** | The patcher could not run — no app, no entry bundle, or `--revert` with nothing to restore. The message says which |
 | Inspector missing after an update | Wait ~30 s for the agent, or run `bash src/ensure.sh` |
 | "Copy failed" in the readout | The clipboard was refused; the selector is still selectable by hand |
 

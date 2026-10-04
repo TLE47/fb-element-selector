@@ -19,23 +19,27 @@
 // HOW IT SURVIVES UPDATES
 //   An update replaces the bundle wholesale, under a new content hash, so a hand edit is lost
 //   while a script can be re-run. The entry assets are resolved by size rather than by name, so
-//   a new hash needs no edit here. Every anchor is verified before anything is written, and the
-//   patched source is parsed as an ES module before it is allowed to reach disk: `node --check`
-//   is useless for this (it exits 0 on any file containing ESM syntax), and an unparseable
-//   bundle would leave the app with a blank window and no way back but a reinstall.
-//   Pair this with ensure.sh / the LaunchAgent to have it re-applied automatically.
+//   a new hash needs no edit here. There are TWO tiers: tier 1 injects a React component and
+//   leans on three minified identifiers the bundler assigns, while tier 2 is appended and needs
+//   no anchor at all - so a rebuild that renumbers the bundle degrades to plain DOM rather than
+//   losing the feature. The patched source is parsed as an ES module before it is allowed to
+//   reach disk: `node --check` is useless for this (it exits 0 on any file containing ESM
+//   syntax), and an unparseable bundle would leave the app with a blank window and no way back
+//   but a reinstall. Pair this with ensure.sh / the LaunchAgent to re-apply automatically.
 //
 // USAGE
 //   node src/patch.mjs            patch (default)
-//   node src/patch.mjs --check    report only; exit 0 patched, 1 not patched or anchors gone
+//   node src/patch.mjs --check    report only; exit 1 if not patched, 1 if already patched
 //   node src/patch.mjs --revert   restore the last pre-patch backup
 //
 // ENV
 //   ASSETS                 the assets directory (default: the installed app's)
 //   FREEBUFF_PATCH_BACKUP  where to keep pre-patch backups (default: ~/.fb-scratch/…)
 //
-// Exit codes: 0 ok · 1 not patched (or, with --check, already patched) · 2 anchors gone,
-// nothing written · 3 the patched bundle would not parse, nothing written.
+// Exit codes: 0 ok · 1 not patched (or, with --check, already patched) · 2 the patcher could not
+// run (no app, no entry bundle, --revert with nothing to restore), nothing written · 3 the patched
+// bundle would not parse, nothing written. A moved anchor is NOT an error any more: tier 2 takes
+// over and the run still exits 0.
 
 import { readdirSync, readFileSync, writeFileSync, mkdirSync, copyFileSync, renameSync, existsSync, statSync, realpathSync } from 'node:fs'
 import * as fs from 'node:fs'
@@ -64,8 +68,15 @@ function entryAsset(pattern, minSize) {
   return path.join(ASSETS, hit.f)
 }
 
-const JS_FILE = entryAsset(/^index-[\w-]+\.js$/, 1_000_000)
-const CSS_FILE = entryAsset(/^index-[\w-]+\.css$/, 100_000)
+// Resolved LAZILY, not at module scope. At module scope a missing entry threw during import, so
+// the failure escaped main()'s handler as an unhandled stack trace and exited 1 - which reads as
+// "not patched" to --check and dumps a raw Node trace at anyone running it by hand. Lazy means the
+// throw happens inside main(), where it becomes the clean one-line message and exit 2.
+// It also lets the tests import this module for EDITS without an app present.
+let jsFile = null
+let cssFile = null
+const JS_FILE = () => (jsFile ??= entryAsset(/^index-[\w-]+\.js$/, 1_000_000))
+const CSS_FILE = () => (cssFile ??= entryAsset(/^index-[\w-]+\.css$/, 100_000))
 
 // latin1 round-trips bytes 1:1, so the untouched 99% of a UTF-8 bundle survives verbatim.
 const read = (f) => readFileSync(f, 'latin1')
@@ -378,8 +389,8 @@ const isRenamed = (file) => path.basename(file).includes(SUFFIX)
 const INDEX_HTML = path.join(ASSETS, '..', 'index.html')
 
 function unrename() {
-  if (!isRenamed(JS_FILE)) return
-  for (const file of [JS_FILE, CSS_FILE]) {
+  if (!isRenamed(JS_FILE())) return
+  for (const file of [JS_FILE(), CSS_FILE()]) {
     const orig = unrenamed(file)
     if (existsSync(file) && file !== orig) renameSync(file, orig)
   }
@@ -393,7 +404,7 @@ function revert() {
     // index.html in the backup is self-perpetuating: --revert copies it straight back, so the
     // app is left pointing at a renderer that was never written. This is not hypothetical - it
     // happened here, and it silently undid a manual repair on the next revert.
-    const want = [unrenamed(JS_FILE), unrenamed(CSS_FILE)].map((f) => path.basename(f))
+    const want = [unrenamed(JS_FILE()), unrenamed(CSS_FILE())].map((f) => path.basename(f))
     const backupHtml = readFileSync(saved, 'utf8')
     const missing = want.filter((f) => backupHtml.includes(f) === false)
     const alien = [...backupHtml.matchAll(/assets\/index-[\w-]+\.(?:js|css)/g)]
@@ -414,7 +425,7 @@ function revert() {
   // taken BEFORE the first write. The `.orig` copies are no good here: those are what the files
   // held at rename time, which is already patched.
   unrename()
-  for (const orig of [unrenamed(JS_FILE), unrenamed(CSS_FILE)]) {
+  for (const orig of [unrenamed(JS_FILE()), unrenamed(CSS_FILE())]) {
     const pristine = path.join(BACKUP, path.basename(orig))
     if (!existsSync(pristine)) {
       console.error(`fb-element-selector: no pristine copy of ${path.basename(orig)} to restore`)
@@ -427,11 +438,11 @@ function revert() {
 }
 
 function renameAssets() {
-  backup(`${path.basename(unrenamed(JS_FILE))}.orig`, JS_FILE)
-  backup(`${path.basename(unrenamed(CSS_FILE))}.orig`, CSS_FILE)
+  backup(`${path.basename(unrenamed(JS_FILE()))}.orig`, JS_FILE())
+  backup(`${path.basename(unrenamed(CSS_FILE()))}.orig`, CSS_FILE())
   backup('index.html', INDEX_HTML)
   let html = readFileSync(INDEX_HTML, 'utf8')
-  for (const file of [JS_FILE, CSS_FILE]) {
+  for (const file of [JS_FILE(), CSS_FILE()]) {
     html = html.split(path.basename(file)).join(path.basename(renamed(file)))
     renameSync(file, renamed(file))
   }
@@ -493,20 +504,20 @@ async function main() {
   const argv = process.argv.slice(2)
   if (argv.includes('--revert')) return revert()
 
-  const js = read(JS_FILE)
-  const css = read(CSS_FILE)
+  const js = read(JS_FILE())
+  const css = read(CSS_FILE())
   // Two independent markers, because either tier may be the one that landed. `fbInspPick(on)` is
   // tier 1's picker; `fbInspDom` is tier 2's bootstrap. Checking only one would make the patcher
   // re-append on every run after a fallback patch.
   const alreadyJs = js.includes(`function fbInspPick(on){`) || js.includes('function fbInspDom()')
   const alreadyCss = css.includes('.fb-inspect-out')
-  const needsRename = !isRenamed(JS_FILE)
+  const needsRename = !isRenamed(JS_FILE())
   const renamedOk = readFileSync(INDEX_HTML, 'utf8').includes(
-    path.basename(needsRename ? renamed(JS_FILE) : JS_FILE),
+    path.basename(needsRename ? renamed(JS_FILE()) : JS_FILE()),
   )
 
   if (alreadyJs && alreadyCss && renamedOk) {
-    console.error(`already patched: ${path.basename(JS_FILE)}, ${path.basename(CSS_FILE)}`)
+    console.error(`already patched: ${path.basename(JS_FILE())}, ${path.basename(CSS_FILE())}`)
     // An install patched via the fallback keeps reporting fallback mode forever, however many
     // times the agent fires. Without this the second run would look like tier 1 and the user
     // would never be told to re-anchor.
@@ -545,7 +556,7 @@ async function main() {
   const outCss = alreadyCss ? css : `${css}${CSS}`
 
   if (argv.includes('--check')) {
-    console.error(`not patched: ${path.basename(JS_FILE)}, ${path.basename(CSS_FILE)}`)
+    console.error(`not patched: ${path.basename(JS_FILE())}, ${path.basename(CSS_FILE())}`)
     return 1
   }
 
@@ -562,11 +573,11 @@ async function main() {
   }
 
   // Atomic-ish: both backups first, so a failure between the two writes is still recoverable.
-  if (!alreadyJs) backup(path.basename(JS_FILE), JS_FILE)
-  if (!alreadyCss) backup(path.basename(CSS_FILE), CSS_FILE)
-  if (!alreadyJs) write(JS_FILE, out)
-  if (!alreadyCss) write(CSS_FILE, outCss)
-  console.error(`patched ${path.basename(JS_FILE)} + ${path.basename(CSS_FILE)} (backup in ${BACKUP})`)
+  if (!alreadyJs) backup(path.basename(JS_FILE()), JS_FILE())
+  if (!alreadyCss) backup(path.basename(CSS_FILE()), CSS_FILE())
+  if (!alreadyJs) write(JS_FILE(), out)
+  if (!alreadyCss) write(CSS_FILE(), outCss)
+  console.error(`patched ${path.basename(JS_FILE())} + ${path.basename(CSS_FILE())} (backup in ${BACKUP})`)
   // Re-anchor after the writes, so a crash between the two leaves a patched bundle the next run
   // can still rename (the marker check above is what makes that run idempotent).
   if (needsRename) renameAssets()

@@ -70,9 +70,10 @@ prefix. Matching the prefix is what kept a second, differently-moved anchor sile
 ### What is still not solvable
 
 Tier 2 keys on `panel-add` and `aria-label="Open panel tab"`. If an update renames those source
-strings too — not the minified symbols, the app's own markup — both tiers break, and the answer
-is again exit 2 with nothing written. That one needs a human, and no amount of anchoring logic
-reaches it.
+strings too — not the minified symbols, the app's own markup — both tiers fail to mount and the
+inspector is simply absent. That one needs a human, and no amount of anchoring logic reaches it.
+It is also invisible to exit codes: a bundle that parses cleanly falls through both tiers, so
+there is no failure to signal. Checking for the mount is the only way to notice.
 
 ## The traps
 
@@ -184,5 +185,23 @@ The drill stages its own fake release, so it verifies your new anchors against a
 never been seen before — which is the only way to know the anchor is not accidentally unique to
 today's build.
 
-If instead `--check` exits **2**, neither tier applied: tier 2's source strings changed too. See
+If the inspector is missing with no notification, tier 2's host strings probably changed. See
 [What is still not solvable](#the-two-tiers) above.
+
+### The exit-code contract
+
+Measured, because it drifted while tier 2 was added:
+
+| Code | Meaning |
+|---|---|
+| 0 | patched — including via tier 2 |
+| 1 | `--check` only: not patched, or already patched |
+| 2 | the patcher could not run — no app, no entry bundle, `--revert` with nothing to restore |
+| 3 | the patched bundle would not parse; nothing written |
+
+Two traps here. **Exit 2 stopped meaning "the anchors moved"** the moment tier 2 existed — that
+condition now exits 0 — so any doc still describing it that way is describing the old patcher.
+And `entryAsset()` used to run at module scope, so a missing entry bundle threw during *import*,
+escaping `main()`'s handler as an unhandled stack trace and exiting 1: to `--check`, identical to
+"not patched", which is the one answer that means nothing is wrong. The asset lookup is now lazy
+and resolves inside `main()`, so the failure is a one-line message and exit 2.

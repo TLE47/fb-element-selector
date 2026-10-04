@@ -305,6 +305,24 @@ try {
     rmSync(poisonDir, { recursive: true, force: true })
   }
 
+  // 12. The exit-code contract, measured rather than assumed. Two things were wrong here:
+  //     the docs said exit 2 meant "the anchors moved", which stopped being true when tier 2
+  //     made that path exit 0; and a missing entry bundle threw at MODULE scope, so it escaped
+  //     main()'s handler as a raw Node stack trace with exit 1 - indistinguishable, to --check,
+  //     from "not patched". Both are the kind of thing nobody notices until an agent is
+  //     quietly failing for a reason the log does not explain.
+  {
+    const noneDir = mkdtempSync(path.join(os.tmpdir(), 'fb-es-noentry-'))
+    mkdirSync(path.join(noneDir, 'assets'), { recursive: true })
+    const res = spawnSync(process.execPath, ['--experimental-vm-modules', '--no-warnings', patcher],
+      { env: { ...process.env, ASSETS: path.join(noneDir, 'assets'), FREEBUFF_PATCH_BACKUP: path.join(noneDir, 'backup') }, encoding: 'utf8' })
+    const err = res.stderr || ''
+    ok('drill: a missing entry bundle exits 2 with a clean message, not a stack trace',
+      res.status === 2 && /no \/\^index/.test(err) && !/at .*\(.*:\d+:\d+\)/.test(err),
+      `exit ${res.status}: ${err.trim().split('\n')[0]?.slice(0, 70)}`)
+    rmSync(noneDir, { recursive: true, force: true })
+  }
+
   // 10. The entry-point guard must work from a SYMLINKED path. On macOS /var is a symlink to
   //     /private/var, so `mktemp -d` hands out a path that differs from import.meta.url. When
   //     the guard compared them verbatim, main() never ran and the script exited 0 having done
