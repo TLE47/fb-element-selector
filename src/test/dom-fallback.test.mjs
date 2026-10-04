@@ -4,9 +4,15 @@
 // The point of tier 2 is that it survives a renumbered bundle: it depends on no minified
 // identifier at all, only on `className:"panel-add"` and `aria-label:"Open panel tab"`, which are
 // source strings. So the test does the honest thing and renumbers the bundle - rewriting `nU` to
-// `xQ`, `d` to `q7` and `le` to `zz` everywhere - which is exactly what breaks tier 1.
+// `fbq0`, `d` to `fbq1` and `le` to `fbq2` everywhere - which is exactly what breaks tier 1.
 //
 //   USAGE  node --experimental-vm-modules test/dom-fallback.test.mjs
+//
+// ONE CHECK NEEDS THE APP, THE REST DO NOT
+//   Section 1 renumbers the real bundle, which only exists on a machine with Freebuff installed.
+//   Everywhere else — CI included — that one check is reported as SKIP and the other 34 still
+//   run, because they exercise DOMFALLBACK against a jsdom document rather than against the
+//   bundle. SKIP is deliberately not PASS: a skipped check must never read as coverage.
 
 import { readFileSync, existsSync } from 'node:fs'
 import path from 'node:path'
@@ -18,9 +24,15 @@ const ASSETS = process.env.ASSETS || '/Applications/Freebuff.app/Contents/Resour
 const HARNESS = path.join(ROOT, 'node_modules')
 
 let failed = 0
+let skipped = 0
 const ok = (name, pass, detail = '') => {
   if (!pass) failed++
   console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? ` - ${detail}` : ''}`)
+}
+// Never conflated with PASS: a check that could not run is not a check that passed.
+const skip = (name, why) => {
+  skipped++
+  console.log(`SKIP  ${name} - ${why}`)
 }
 
 const { EDITS, DOMFALLBACK } = await import('../patch.mjs')
@@ -30,19 +42,27 @@ if (!existsSync(path.join(HARNESS, 'react', 'index.js')) && !existsSync(path.joi
 }
 
 // --- 1 the renumbered bundle really does break tier 1 --------------------------------------
+// Needs the installed app. On CI there is none, and faking one would prove nothing about the
+// real bundle — so the check reports SKIP rather than passing on a substitute.
 const { readdirSync, statSync } = await import('node:fs')
-const files = readdirSync(ASSETS)
-const jsName = files.filter((f) => /^index-[\w-]+\.js$/.test(f))
-  .map((f) => [f, statSync(path.join(ASSETS, f)).size]).sort((a, b) => b[1] - a[1])[0][0]
-const real = readFileSync(path.join(ASSETS, jsName), 'latin1')
+try {
+  const files = readdirSync(ASSETS)
+  const jsName = files.filter((f) => /^index-[\w-]+\.js$/.test(f))
+    .map((f) => [f, statSync(path.join(ASSETS, f)).size]).sort((a, b) => b[1] - a[1])[0][0]
+  const real = readFileSync(path.join(ASSETS, jsName), 'latin1')
 
-// Renumber the three identifiers tier 1 leans on. Whole-word so we do not corrupt properties.
-const renumbered = real
-  .replace(/\bnU\b/g, 'xQ')
-  .replace(/\bd\b/g, 'q7')
-  .replace(/\ble\b/g, 'zz')
-const tier1Hits = EDITS.map((e) => renumbered.split(e.from).length - 1)
-ok('the renumbered bundle defeats every tier-1 anchor', tier1Hits.every((h) => h !== 1), `hits=${tier1Hits.join(',')}`)
+  // Renumber the three identifiers tier 1 leans on. Whole-word so we do not corrupt properties.
+  // Prefixed names: a plain rename like nU -> xQ collides with an existing binding and the
+  // fixture stops being valid JS, which is a broken test rather than a passing one.
+  const renumbered = real
+    .replace(/\bnU\b/g, 'fbq0')
+    .replace(/\bd\b/g, 'fbq1')
+    .replace(/\ble\b/g, 'fbq2')
+  const tier1Hits = EDITS.map((e) => renumbered.split(e.from).length - 1)
+  ok('the renumbered bundle defeats every tier-1 anchor', tier1Hits.every((h) => h !== 1), `hits=${tier1Hits.join(',')}`)
+} catch {
+  skip('the renumbered bundle defeats every tier-1 anchor', `no app bundle at ${ASSETS}`)
+}
 
 // --- 2 tier 2 has no such dependency --------------------------------------------------------
 ok('tier 2 references no minified identifier the patcher relied on',
@@ -227,5 +247,9 @@ ok('announce is only reachable from the deadline, and only when unmounted',
   ok('and the button really is mounted in that document', !!dom3.window.document.querySelector('.fb-inspect-btn'))
 }
 
-console.log(failed ? `\n${failed} check(s) failed` : '\nall checks passed')
+console.log(
+  failed
+    ? `\n${failed} check(s) failed${skipped ? `, ${skipped} skipped` : ''}`
+    : `\nall checks passed${skipped ? ` (${skipped} skipped — needs the installed app)` : ''}`,
+)
 process.exitCode = failed ? 1 : 0

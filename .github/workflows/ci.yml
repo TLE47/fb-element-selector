@@ -1,0 +1,77 @@
+name: CI
+
+# Why this is not "run the tests":
+#
+# The three behaviour suites all read the installed Freebuff bundle, which is proprietary and
+# cannot be committed to a public repository. On a GitHub runner there is no app, so they would
+# either skip or - worse - pass against a substitute that proves nothing.
+#
+# So CI runs `ci-checks.mjs`, which covers what can be verified without the app: the README's
+# commands still resolve, the shell scripts parse, the injected blobs are ASCII and round-trip
+# through latin1, the tier-2 blob parses, and nothing proprietary got committed. The behaviour
+# suites run locally via `bash src/test/run-isolated.sh`, which stages its own pristine bytes.
+#
+# The tier-2 suite is run here too. One of its 35 checks needs the app and reports SKIP; the other
+# 34 drive DOMFALLBACK against a jsdom document and are real coverage, not a formality. SKIP is
+# never counted as PASS.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Integrity and tier-2 behaviour
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # No cache: the dependency set is three packages and a cache key that drifts is worse than
+      # a twenty-second install.
+      - name: Install dependencies
+        working-directory: src
+        run: npm install --no-audit --no-fund
+
+      # --experimental-vm-modules is not optional. The parse guard in patch.mjs, and the check
+      # that DOMFALLBACK parses, both use vm.SourceTextModule, which exists only under that flag.
+      - name: Integrity checks
+        run: node --experimental-vm-modules --no-warnings src/test/ci-checks.mjs
+
+      - name: Tier-2 fallback behaviour
+        run: node --experimental-vm-modules --no-warnings src/test/dom-fallback.test.mjs
+
+      # Guards against a green run that quietly skipped everything, which is the failure mode a
+      # count-based suite cannot report on its own: everything SKIPs, the exit code is still 0.
+      - name: Assert the suites actually ran
+        run: |
+          set -euo pipefail
+          node --experimental-vm-modules --no-warnings src/test/ci-checks.mjs > ci.log
+          node --experimental-vm-modules --no-warnings src/test/dom-fallback.test.mjs > fb.log
+          grep -q 'all checks passed' ci.log
+          grep -q 'all checks passed' fb.log
+          # 24 integrity checks, exactly.
+          test "$(grep -c '^PASS' ci.log)" -eq 24
+          # The tier-2 suite must have really executed its jsdom coverage: at least 34 PASS. The
+          # one check that needs the installed app is a SKIP here (there is no app on a runner),
+          # so the exact skip count is 1 - but asserting a range rather than a fixed number keeps
+          # this honest if the suite is ever run on a machine that does have Freebuff.
+          fb_pass=$(grep -c '^PASS' fb.log)
+          fb_skip=$(grep -c '^SKIP' fb.log)
+          test "$fb_pass" -ge 34
+          test "$fb_skip" -le 1
+          echo "counts verified: $(grep -c '^PASS' ci.log) integrity, $fb_pass tier-2, $fb_skip skipped"
