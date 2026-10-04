@@ -49,7 +49,7 @@ const ASSETS =
 // real backup directory. It previously was not, and a test harness that can clobber production
 // state is not a harness.
 const BACKUP =
-  process.env.FREEBUFF_PATCH_BACKUP || path.join(os.homedir(), '.fb-scratch', 'freebuff-element-selector')
+  process.env.FREEBUFF_PATCH_BACKUP || path.join(os.homedir(), '.fb-scratch', 'fb-element-selector')
 export const MARK = 'fb-inspect'
 
 // The renderer entry is the only non-chunk asset named index-*.js; the several hundred other
@@ -278,7 +278,7 @@ function revert() {
   for (const orig of [unrenamed(JS_FILE), unrenamed(CSS_FILE)]) {
     const pristine = path.join(BACKUP, path.basename(orig))
     if (!existsSync(pristine)) {
-      console.error(`freebuff-element-selector: no pristine copy of ${path.basename(orig)} to restore`)
+      console.error(`fb-element-selector: no pristine copy of ${path.basename(orig)} to restore`)
       continue
     }
     copyFileSync(pristine, orig)
@@ -355,7 +355,7 @@ async function main() {
     else out = out.replace(edit.from, edit.to)
   }
   if (missing.length) {
-    console.error(`freebuff-element-selector: anchors gone, nothing written:\n  ${missing.join('\n  ')}`)
+    console.error(`fb-element-selector: anchors gone, nothing written:\n  ${missing.join('\n  ')}`)
     return 2
   }
 
@@ -372,7 +372,7 @@ async function main() {
     const problem = await esmProblem(out)
     if (problem) {
       console.error(
-        `freebuff-element-selector: the patched bundle would not parse, nothing written:\n  ${problem}`,
+        `fb-element-selector: the patched bundle would not parse, nothing written:\n  ${problem}`,
       )
       return 3
     }
@@ -402,7 +402,7 @@ if (process.argv[1] && import.meta.url === url.pathToFileURL(realpathSync(proces
   try {
     process.exitCode = await main()
   } catch (error) {
-    console.error(`freebuff-element-selector: ${error.message}`)
+    console.error(`fb-element-selector: ${error.message}`)
     process.exitCode = 2
   }
 }

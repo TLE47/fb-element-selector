@@ -1,5 +1,5 @@
 {
-  "name": "freebuff-element-selector",
+  "name": "fb-element-selector",
   "version": "1.0.0",
   "description": "A DevTools-style element inspector for the Freebuff desktop app: click the magnifier, hover any element of the app, get its CSS selector.",
   "type": "module",

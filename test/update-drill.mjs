@@ -22,7 +22,7 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const APP_UI = '/Applications/Freebuff.app/Contents/Resources/orchestrator/ui'
-const BACKUP = process.env.FREEBUFF_PATCH_BACKUP || path.join(os.homedir(), '.fb-scratch', 'freebuff-element-selector')
+const BACKUP = process.env.FREEBUFF_PATCH_BACKUP || path.join(os.homedir(), '.fb-scratch', 'fb-element-selector')
 
 let failed = 0
 const ok = (name, pass, detail = '') => {
@@ -172,7 +172,7 @@ try {
   brokenRun()
   const firstNotice = inboxText()
   ok('drill: a moved anchor raises a notification', /needs re-anchoring/.test(firstNotice), firstNotice.trim().split('\n')[0]?.slice(0, 80))
-  ok('drill: the notification names the app version and the log', /Freebuff/.test(firstNotice) && /freebuff-element-selector\.log|ensure\.log/.test(firstNotice))
+  ok('drill: the notification names the app version and the log', /Freebuff/.test(firstNotice) && /fb-element-selector\.log|ensure\.log/.test(firstNotice))
   ok('drill: the broken state is recorded for dedupe', readFileSync(ensureState, 'utf8').trim().startsWith('broken:'))
 
   // The reason the fingerprint exists: a WatchPaths agent can fire repeatedly while the breakage

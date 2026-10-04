@@ -7,9 +7,9 @@
   Substitute both when installing:
 
     mkdir -p ~/Library/LaunchAgents
-    sed "s#__REPO__#$PWD#g; s#__HOME__#$HOME#g" launchd/com.freebuff.patch-ensure.plist \
-      > ~/Library/LaunchAgents/com.freebuff.patch-ensure.plist
-    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.freebuff.patch-ensure.plist
+    sed "s#__REPO__#$PWD#g; s#__HOME__#$HOME#g" launchd/com.fb.element-selector.plist \
+      > ~/Library/LaunchAgents/com.fb.element-selector.plist
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.fb.element-selector.plist
 
   Two triggers, because they catch different events:
     WatchPaths  an update landing while the app is already installed, mid-session
@@ -20,13 +20,13 @@
   inside the user's own app bundle and its own log file.
 
   Remove:
-    launchctl bootout gui/$(id -u)/com.freebuff.patch-ensure
-    rm ~/Library/LaunchAgents/com.freebuff.patch-ensure.plist
+    launchctl bootout gui/$(id -u)/com.fb.element-selector
+    rm ~/Library/LaunchAgents/com.fb.element-selector.plist
 -->
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.freebuff.patch-ensure</string>
+  <string>com.fb.element-selector</string>
   <key>ProgramArguments</key>
   <array>
     <string>/bin/bash</string>
@@ -43,9 +43,9 @@
   <key>ThrottleInterval</key>
   <integer>30</integer>
   <key>StandardOutPath</key>
-  <string>__HOME__/.fb-scratch/freebuff-element-selector.out.log</string>
+  <string>__HOME__/.fb-scratch/fb-element-selector.out.log</string>
   <key>StandardErrorPath</key>
-  <string>__HOME__/.fb-scratch/freebuff-element-selector.err.log</string>
+  <string>__HOME__/.fb-scratch/fb-element-selector.err.log</string>
   <key>ProcessType</key>
   <string>Background</string>
 </dict>

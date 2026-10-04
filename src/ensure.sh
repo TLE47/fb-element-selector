@@ -29,9 +29,9 @@ APP="/Applications/Freebuff.app"
 SCRATCH="$HOME/.fb-scratch"
 # These are overridable so test/update-drill.sh can exercise this against a staged bundle without
 # touching the real log, the real app, or the real backup directory.
-LOG="${FREEBUFF_PATCH_LOG:-$SCRATCH/freebuff-element-selector.log}"
-STATE="${FREEBUFF_PATCH_STATE:-$SCRATCH/freebuff-element-selector.state}"
-export FREEBUFF_PATCH_BACKUP="${FREEBUFF_PATCH_BACKUP:-$SCRATCH/freebuff-element-selector-backup}"
+LOG="${FREEBUFF_PATCH_LOG:-$SCRATCH/fb-element-selector.log}"
+STATE="${FREEBUFF_PATCH_STATE:-$SCRATCH/fb-element-selector.state}"
+export FREEBUFF_PATCH_BACKUP="${FREEBUFF_PATCH_BACKUP:-$SCRATCH/fb-element-selector-backup}"
 NOTIFY="${FREEBUFF_PATCH_NOTIFY:-1}"
 
 # node exists only under nvm on this machine, and a login shell may not have it on PATH.

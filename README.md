@@ -1,4 +1,4 @@
-# freebuff-element-selector
+# fb-element-selector
 
 A DevTools-style **element inspector** for the [Freebuff](https://freebuff.ai) desktop app.
 
@@ -32,8 +32,8 @@ itself**.
 ## Install
 
 ```bash
-git clone https://github.com/TLE47/freebuff-element-selector.git
-cd freebuff-element-selector
+git clone https://github.com/TLE47/fb-element-selector.git
+cd fb-element-selector
 npm install            # dev deps only, for the tests
 node src/patch.mjs     # patch the installed app
 ```
@@ -54,9 +54,9 @@ while a script can be re-run. To have this re-applied automatically, install the
 
 ```bash
 mkdir -p ~/Library/LaunchAgents
-sed "s#__REPO__#$PWD#g; s#__HOME__#$HOME#g" launchd/com.freebuff.patch-ensure.plist \
-  > ~/Library/LaunchAgents/com.freebuff.patch-ensure.plist
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.freebuff.patch-ensure.plist
+sed "s#__REPO__#$PWD#g; s#__HOME__#$HOME#g" launchd/com.fb.element-selector.plist \
+  > ~/Library/LaunchAgents/com.fb.element-selector.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.fb.element-selector.plist
 ```
 
 It runs on every login and whenever anything under `Freebuff.app` changes, so an update landing
@@ -76,8 +76,8 @@ cannot become noise.
 Undo the agent:
 
 ```bash
-launchctl bootout gui/$(id -u)/com.freebuff.patch-ensure
-rm ~/Library/LaunchAgents/com.freebuff.patch-ensure.plist
+launchctl bootout gui/$(id -u)/com.fb.element-selector
+rm ~/Library/LaunchAgents/com.fb.element-selector.plist
 ```
 
 ## How it works
