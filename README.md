@@ -4,7 +4,10 @@ A DevTools-style **element inspector** for the [Freebuff](https://freebuff.ai) d
 
 Click the magnifier in the right panel's tab strip, and the cursor turns into a crosshair. A
 purple outline tracks whatever you hover, labelled with its tag, classes and pixel size. Click
-to select it and read a CSS selector you can paste straight into devtools.
+to select it: the readout shows a CSS selector you can paste straight into devtools, **and the
+selector is copied to your clipboard on the spot** — no second click needed. The readout says
+`Copied` when that worked, or tells you to copy manually when it did not, because a silent
+failure would look exactly like a success.
 
 ```
 ┌────────────────────────────────────────────────────────────┐
@@ -99,7 +102,7 @@ injection point: `k` (React), `d` (the jsx runtime) and `le` (the app's Icon com
 ## Tests
 
 ```bash
-npm test              # behaviour: 34 checks in jsdom with real React 19
+npm test              # behaviour: 44 checks in jsdom with real React 19
 npm run test:update   # durability: 27 checks against a simulated app update
 ```
 
@@ -142,6 +145,11 @@ These are all things that cost real debugging time here:
   is a symlink to `/private/var`, so the two differ for any path under `/tmp`. Comparing them
   verbatim makes the entry-point guard silently skip `main()` and exit 0 having done nothing —
   a failed patch that reports success.
+- **A `catch {}` around a clipboard write turns a typo into a silent failure.** A bare
+  `navigator` reference throws `ReferenceError` in any scope where it is not a global; that
+  throw gets swallowed by the surrounding `catch`, and every copy then reports failure for a
+  reason no log mentions. Use `window.navigator`, and report the outcome rather than assuming
+  it.
 
 ## Requirements
 

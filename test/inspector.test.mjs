@@ -110,6 +110,20 @@ ok(
   INSPECT.includes('data-fb-inspect-ui') &&
     INSPECT.includes('closest("[data-fb-inspect],[data-fb-inspect-ui]")'),
 )
+// Copying is the point of the tool, and an unguarded writeText cannot report failure - so the
+// write has to be observable and has to have a fallback.
+ok(
+  'static: picking copies the selector, not just showing it',
+  INSPECT.includes('fbInspCopy(o.sel)') && INSPECT.includes('show({sel:fbInspSel(el)'),
+)
+ok(
+  'static: the copy result is surfaced and a stale write cannot relabel a newer pick',
+  INSPECT.includes('copied:ok?"ok":"fail"') && INSPECT.includes('p.sel===o.sel'),
+)
+ok(
+  'static: the clipboard write has a fallback and cannot throw into the picker',
+  INSPECT.includes('fbInspCopyFallback') && INSPECT.includes('document.execCommand'),
+)
 ok(
   'static: the readout is anchored out of flow so it cannot resize the strip',
   /\.fb-inspect-out\{[^}]*position:absolute/.test(CSS_RULES) && /top:calc\(100% \+ 6px\)/.test(CSS_RULES),
@@ -178,16 +192,32 @@ if (!existsSync(path.join(HARNESS, 'node_modules', 'react', 'index.js')) &&
     document: dom.window.document,
     console,
   })
-  let fbInspect, fbInspSel, fbInspDesc
+  let fbInspect, fbInspSel, fbInspDesc, fbInspCopy
   try {
-    new vm.Script(`${INSPECT}\nmodule.exports={fbInspect,fbInspSel,fbInspDesc}`, {
+    new vm.Script(`${INSPECT}\nmodule.exports={fbInspect,fbInspSel,fbInspDesc,fbInspCopy}`, {
       filename: 'fbinspect.js',
     }).runInContext(ctx)
-    ;({ fbInspect, fbInspSel, fbInspDesc } = ctx.module.exports)
+    ;({ fbInspect, fbInspSel, fbInspDesc, fbInspCopy } = ctx.module.exports)
   } catch (error) {
     ok('runtime: the inspector lifted from the bundle', false, error.message.slice(0, 100))
   }
-  ok('runtime: the inspector and its helpers lifted from the bundle', !!fbInspect && !!fbInspSel && !!fbInspDesc)
+  ok('runtime: the inspector and its helpers lifted from the bundle', !!fbInspect && !!fbInspSel && !!fbInspDesc && !!fbInspCopy)
+
+  // jsdom has no clipboard, so stand one up and record what the inspector writes. `mode` lets a
+  // test make the async Clipboard API fail, which is the case that must not pass silently.
+  const copied = []
+  let clipMode = 'ok'
+  Object.defineProperty(dom.window.navigator, 'clipboard', {
+    configurable: true,
+    value: {
+      writeText: (text) => {
+        if (clipMode === 'reject') return Promise.reject(new Error('denied'))
+        if (clipMode === 'throw') throw new Error('denied')
+        copied.push(text)
+        return Promise.resolve()
+      },
+    },
+  })
 
   if (fbInspect) {
     // jsdom has no layout, so give the probe a box or the outline is legitimately hidden.
@@ -210,6 +240,16 @@ if (!existsSync(path.join(HARNESS, 'node_modules', 'react', 'index.js')) &&
     ok('runtime: the hover label shows tag, class and size', /^button\.probe-btn\.is-active {2}120x40$/.test(fbInspDesc(probe)), fbInspDesc(probe))
 
     const root = createRoot(document.getElementById('root'))
+    // The copy helper must resolve true on success and false - not throw, not hang - when the
+    // async API is unavailable or refuses.
+    copied.length = 0
+    ok('runtime: fbInspCopy resolves true and writes the text', (await fbInspCopy('#hello')) === true && copied[0] === '#hello', copied.join(','))
+    clipMode = 'reject'
+    ok('runtime: a refused clipboard resolves false instead of throwing', (await fbInspCopy('#nope')) === false)
+    clipMode = 'throw'
+    ok('runtime: a clipboard that throws synchronously still resolves false', (await fbInspCopy('#boom')) === false)
+    clipMode = 'ok'
+
     act(() => root.render(React.createElement(fbInspect, {})))
     const btn = () => document.querySelector('.fb-inspect-btn')
     ok('runtime: it starts idle and says what it does', btn().getAttribute('aria-pressed') === 'false' && btn().getAttribute('aria-label') === 'Inspect an element in the app')
@@ -230,12 +270,16 @@ if (!existsSync(path.join(HARNESS, 'node_modules', 'react', 'index.js')) &&
     )
     ok('runtime: the hover label names the element', document.querySelectorAll('[data-fb-inspect]')[1].textContent.includes('button'))
 
-    // The whole point: the click selects, and it must NOT also activate the element.
+    // The whole point: the click selects, it must NOT also activate the element, and it must
+    // copy the selector on the spot.
     let activated = 0
+    copied.length = 0
     probe.addEventListener('click', () => activated++)
-    act(() => probe.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true })))
+    await act(async () => probe.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true })))
     ok('runtime: clicking selects it without activating it', activated === 0, `${activated} activations`)
-    ok('runtime: the pick shows a selector you can read and copy', document.querySelector('.fb-inspect-sel')?.value === '#fb-probe', document.querySelector('.fb-inspect-sel')?.value)
+    ok('runtime: the pick shows a selector you can read', document.querySelector('.fb-inspect-sel')?.value === '#fb-probe', document.querySelector('.fb-inspect-sel')?.value)
+    ok('runtime: picking copies the selector to the clipboard', copied[0] === '#fb-probe', copied.join(','))
+    ok('runtime: the copy is confirmed in the readout', document.querySelector('.fb-inspect-status.ok')?.textContent === 'Copied', document.querySelector('.fb-inspect-status')?.textContent)
     ok('runtime: picking tears the picker down again', document.querySelector('[data-fb-inspect]') === null && document.body.style.cursor === '' && btn().getAttribute('aria-pressed') === 'false')
 
     act(() => btn().dispatchEvent(new dom.window.Event('click', { bubbles: true })))
@@ -245,6 +289,16 @@ if (!existsSync(path.join(HARNESS, 'node_modules', 'react', 'index.js')) &&
     act(() => btn().dispatchEvent(new dom.window.Event('click', { bubbles: true })))
     act(() => btn().dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true })))
     ok('runtime: clicking the inspector button cancels instead of selecting the button', document.querySelector('[data-fb-inspect]') === null && btn().getAttribute('aria-pressed') === 'false')
+
+    // A failed copy must say so rather than looking like a success. This has to run BEFORE the
+    // unmount test below, or there is no component left to click.
+    act(() => btn().dispatchEvent(new dom.window.Event('click', { bubbles: true })))
+    copied.length = 0
+    clipMode = 'reject'
+    await act(async () => probe.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true })))
+    ok('runtime: a failed copy is reported, not silently swallowed', document.querySelector('.fb-inspect-status.fail')?.textContent.includes('Copy failed'), document.querySelector('.fb-inspect-status')?.textContent)
+    ok('runtime: a failed copy does not claim Copied', document.querySelector('.fb-inspect-status.ok') === null)
+    clipMode = 'ok'
 
     // Unmounting mid-pick must not leave full-window listeners or overlays alive.
     act(() => btn().dispatchEvent(new dom.window.Event('click', { bubbles: true })))

@@ -136,16 +136,39 @@ export const INSPECT =
   `window.addEventListener("click",click,true);` +
   `window.addEventListener("keydown",key,true);` +
   `return done}` +
+  // Clipboard. The app's own Cmd+C in the terminal calls navigator.clipboard.writeText
+  // unguarded, so that is the API that works here - but an unguarded call cannot tell you it
+  // failed, and a picker that silently copies nothing is worse than one that does not. So the
+  // write is reported back and the readout says so, with a textarea+execCommand fallback for
+  // when the async Clipboard API is unavailable or refuses.
+  `function fbInspCopyFallback(s){try{` +
+  `const ta=document.createElement("textarea");ta.value=s;` +
+  `ta.setAttribute("readonly","");` +
+  `ta.style.cssText="position:fixed;top:0;left:0;width:1px;height:1px;padding:0;border:0;opacity:0;pointer-events:none";` +
+  `document.body.appendChild(ta);ta.select();` +
+  `const ok=!!(document.execCommand&&document.execCommand("copy"));` +
+  `ta.remove();return ok}catch{return !1}}` +
+  `function fbInspCopy(s){try{` +
+  // window.navigator, NOT a bare navigator: a bare global throws ReferenceError in any scope
+  // where it is not defined, and that throw would be swallowed by this very catch and read as
+  // "copy failed" on every pick.
+  `const c=window.navigator&&window.navigator.clipboard;` +
+  `if(c&&c.writeText)` +
+  `return Promise.resolve(c.writeText(s)).then(()=>!0,()=>fbInspCopyFallback(s));` +
+  `return Promise.resolve(fbInspCopyFallback(s))}catch{return Promise.resolve(!1)}}` +
   `function fbInspect(){` +
   `const[b,R]=k.useState(!1),[out,S]=k.useState(null),stop=k.useRef(null);` +
   `const cancel=()=>{if(stop.current){stop.current();stop.current=null}};` +
   `k.useEffect(()=>()=>cancel(),[]);` +
+  // Picking copies the selector straight away - that is the whole point of the tool - and the
+  // outcome is written back onto THIS pick only, guarded by the selector, so a slow write from
+  // an earlier pick cannot relabel a newer one.
+  `const show=o=>{S(o);fbInspCopy(o.sel).then(ok=>S(p=>p&&p.sel===o.sel?{...p,copied:ok?"ok":"fail"}:p))};` +
   `const toggle=()=>{if(b){cancel();R(!1);return}S(null);R(!0);` +
   `stop.current=fbInspPick(el=>{stop.current=null;R(!1);if(!el)return;` +
   `const r=el.getBoundingClientRect();` +
-  `S({sel:fbInspSel(el),desc:el.tagName.toLowerCase()+"  "+Math.round(r.width)+"x"+Math.round(r.height)})})};` +
-  `const copy=()=>{const s=out?out.sel:"";` +
-  `try{window.navigator.clipboard&&window.navigator.clipboard.writeText(s)}catch{}S(null)};` +
+  `show({sel:fbInspSel(el),desc:el.tagName.toLowerCase()+"  "+Math.round(r.width)+"x"+Math.round(r.height),copied:""})})};` +
+  `const copy=()=>{const s=out?out.sel:"";if(!s)return;fbInspCopy(s).then(()=>S(null))};` +
   `return d.jsxs("div",{className:"fb-inspect","data-fb-inspect-ui":"",children:[` +
   `d.jsx("button",{type:"button",className:b?"panel-add fb-inspect-btn on":"panel-add fb-inspect-btn",` +
   `"aria-label":b?"Cancel element selection":"Inspect an element in the app","aria-pressed":b,` +
@@ -156,7 +179,10 @@ export const INSPECT =
   `onFocus:s=>s.target.select(),onClick:s=>s.target.select(),title:out.sel,` +
   `"aria-label":"Selected element CSS selector"}),` +
   `d.jsx("span",{className:"fb-inspect-meta",children:out.desc}),` +
-  `d.jsx("button",{type:"button",className:"fb-inspect-copy","aria-label":"Copy selector",` +
+  // role=status so a screen reader announces the copy result, since there is no other cue.
+  `out.copied?d.jsx("span",{className:"fb-inspect-status "+out.copied,role:"status",` +
+  `children:out.copied==="ok"?"Copied":"Copy failed - select and copy manually"}):null,` +
+  `d.jsx("button",{type:"button",className:"fb-inspect-copy","aria-label":"Copy selector and close",` +
   `title:"Copy selector",onClick:copy,children:d.jsx(le,{name:"x"})})]}):null]})}`
 
 // Each edit: an anchor that must exist exactly once, and the text that replaces it.
@@ -190,6 +216,11 @@ export const CSS =
   `.fb-inspect-sel{flex:1;min-width:0;padding:3px 6px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);font:11px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace}` +
   `.fb-inspect-sel:focus{outline:none;border-color:var(--accent)}` +
   `.fb-inspect-meta{flex:0 0 auto;color:var(--faint);font-size:var(--font-size-label);white-space:nowrap}` +
+  // The copy result is shown rather than assumed: an unguarded writeText that silently fails
+  // would make a broken copy look exactly like a working one.
+  `.fb-inspect-status{flex:0 0 auto;font-size:var(--font-size-label);white-space:nowrap}` +
+  `.fb-inspect-status.ok{color:var(--accent)}` +
+  `.fb-inspect-status.fail{color:var(--danger)}` +
   `.fb-inspect-copy{flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:22px;height:22px;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--muted);cursor:pointer}` +
   `.fb-inspect-copy:hover{background:var(--raised);color:var(--text)}`
 
