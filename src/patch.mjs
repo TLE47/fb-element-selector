@@ -185,6 +185,145 @@ export const INSPECT =
   `d.jsx("button",{type:"button",className:"fb-inspect-copy","aria-label":"Copy selector and close",` +
   `title:"Copy selector",onClick:copy,children:d.jsx(le,{name:"x"})})]}):null]})}`
 
+// --- tier 2: the fallback that survives a renumbered bundle ----------------------------------
+// Tier 1 above injects a React component and depends on three MINIFIED identifiers - `k` (React),
+// `d` (the jsx runtime) and `le` (the app's Icon). Those are assigned by the bundler, so a
+// rebuild can rename any of them and the patch silently fails to mount.
+//
+// This tier depends on nothing minified. It is appended to the bundle, mounts a plain-DOM button
+// beside the panel launcher's "+", and finds that button by `className:"panel-add"` plus
+// `aria-label:"Open panel tab"` - strings that come from the app's SOURCE and survive
+// minification. The picker itself is pure DOM, so the behaviour is identical.
+//
+// It is only used when tier 1's anchors do not resolve, so the two can never both mount.
+export const DOMFALLBACK =
+  `/*fb-dom*/function fbInspSelD(el){if(!el||el.nodeType!==1)return"";` +
+  `if(el.id)return "#"+el.id.replace(/([^\w-])/g,"\\$1");` +
+  `var p=[];` +
+  `for(var n=el;n&&n.nodeType===1&&n!==document.body&&p.length<6;n=n.parentElement){` +
+  `if(n.id){p.unshift("#"+n.id);break}` +
+  `var s=n.tagName.toLowerCase();` +
+  `var cls=Array.prototype.slice.call(n.classList||[]).filter(function(x){return !/^(is-|has-)/.test(x)}).slice(0,2);` +
+  `if(cls.length)s+="."+cls.join(".");` +
+  `var par=n.parentElement;` +
+  `if(par){var all=Array.prototype.slice.call(par.children);` +
+  `var same=all.filter(function(c){return c.tagName===n.tagName});` +
+  `if(same.length>1)s+=":nth-of-type("+(all.indexOf(n)+1)+")"}` +
+  `p.unshift(s)}` +
+  `return p.join(" > ")||"html"}` +
+  `function fbInspCopyD(s){try{` +
+  `if(window.navigator&&window.navigator.clipboard&&window.navigator.clipboard.writeText)` +
+  `return Promise.resolve(window.navigator.clipboard.writeText(s)).then(function(){return true},function(){return false});` +
+  `return Promise.resolve(false)}catch{return Promise.resolve(false)}}` +
+  // The picker is pure DOM, so it is shared with the React tier verbatim - same behaviour,
+  // same capture-phase click consumption, same Escape.
+  `function fbInspPickD(on){` +
+  `var oc=document.createElement("div"),lb=document.createElement("div");` +
+  `for(var i=0;i<2;i++){var x=i?lb:oc;x.setAttribute("data-fb-inspect","");document.body.appendChild(x)}` +
+  `oc.style.cssText="position:fixed;z-index:2147483646;pointer-events:none;border:2px solid #7c5cff;background:rgba(124,92,255,.12);display:none";` +
+  `lb.style.cssText="position:fixed;z-index:2147483647;pointer-events:none;padding:2px 6px;border-radius:4px;background:#5b3ee4;color:#fff;font:11px/1.4 ui-monospace,Menlo,monospace;white-space:nowrap;display:none";` +
+  `var RAF=window.requestAnimationFrame?window.requestAnimationFrame.bind(window):function(f){return window.setTimeout(f,16)};` +
+  `var prev=document.body.style.cursor;document.body.style.cursor="crosshair";` +
+  `var raf=0,last=null,over=false;` +
+  `function desc(el){var r=el.getBoundingClientRect();` +
+  `var cn=typeof el.className==="string"?el.className.trim():"";` +
+  `return el.tagName.toLowerCase()+(cn?"."+cn.split(/\s+/).slice(0,2).join("."):"")+"  "+Math.round(r.width)+"x"+Math.round(r.height)}` +
+  `var paint=function(){raf=0;if(!last)return;var r=last.getBoundingClientRect();` +
+  `if(!r.width&&!r.height){oc.style.display="none";lb.style.display="none";return}` +
+  `oc.style.display="block";oc.style.left=r.left+"px";oc.style.top=r.top+"px";` +
+  `oc.style.width=r.width+"px";oc.style.height=r.height+"px";` +
+  `lb.style.display="block";lb.textContent=desc(last);` +
+  `lb.style.left=Math.max(0,Math.min(r.left,window.innerWidth-lb.offsetWidth-8))+"px";` +
+  `lb.style.top=Math.max(0,r.top-lb.offsetHeight-6)+"px"};` +
+  `var skip=function(t){return !t||t.nodeType!==1||(t.closest&&t.closest("[data-fb-inspect],[data-fb-inspect-ui]"))};` +
+  `var move=function(e){if(!over||skip(e.target))return;last=e.target;if(!raf)raf=RAF(paint)};` +
+  `var done=function(){over=false;` +
+  `window.removeEventListener("mousemove",move,true);` +
+  `window.removeEventListener("click",click,true);` +
+  `window.removeEventListener("keydown",key,true);` +
+  `document.body.style.cursor=prev;oc.remove();lb.remove();last=null};` +
+  `var click=function(e){if(!over||skip(e.target))return;var el=e.target;` +
+  `e.preventDefault();e.stopPropagation();done();on(el)};` +
+  `var key=function(e){if(!over||e.key!=="Escape")return;e.preventDefault();e.stopPropagation();done();on(null)};` +
+  `over=true;` +
+  `window.addEventListener("mousemove",move,true);` +
+  `window.addEventListener("click",click,true);` +
+  `window.addEventListener("keydown",key,true);` +
+  `return done}` +
+  // The UI. Plain DOM, no React: this is the whole point of the tier, so it must not touch a
+  // single minified identifier.
+  `function fbInspUi(){` +
+  `var wrap=document.createElement("div");` +
+  `wrap.className="fb-inspect";wrap.setAttribute("data-fb-inspect-ui","");` +
+  `var btn=document.createElement("button");` +
+  `btn.type="button";btn.className="panel-add fb-inspect-btn";` +
+  `btn.title="Pick any element in Freebuff";` +
+  `btn.setAttribute("aria-label","Inspect an element in the app");` +
+  `btn.setAttribute("aria-pressed","false");` +
+  `btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>';` +
+  `wrap.appendChild(btn);` +
+  `var armed=false,cancel=null,out=null,status=null;` +
+  `function teardown(){if(cancel){cancel();cancel=null}armed=false;` +
+  `btn.classList.remove("on");btn.setAttribute("aria-pressed","false");` +
+  `if(hint&&hint.parentNode)hint.remove();hint=null}` +
+  `function render(){if(out){wrap.appendChild(out)}` +
+  `if(status){wrap.appendChild(status)}}` +
+  `var hint=null;` +
+  `btn.addEventListener("click",function(ev){` +
+  `ev.stopPropagation();` +
+  `if(armed){teardown();return}` +
+  `if(out){out.remove();out=null}` +
+  `if(status){status.remove();status=null}` +
+  `armed=true;btn.classList.add("on");btn.setAttribute("aria-pressed","true");` +
+  `hint=document.createElement("span");` +
+  `hint.className="fb-inspect-hint";hint.setAttribute("role","status");` +
+  `hint.textContent="Click an element · Esc to cancel";` +
+  `document.body.appendChild(hint);` +
+  `cancel=fbInspPickD(function(el){teardown();` +
+  `if(!el)return;` +
+  `var r=el.getBoundingClientRect();` +
+  `var sel=fbInspSelD(el);` +
+  `out=document.createElement("div");out.className="fb-inspect-out";` +
+  `var inp=document.createElement("input");` +
+  `inp.className="fb-inspect-sel";inp.readOnly=true;inp.value=sel;` +
+  `inp.title=sel;inp.setAttribute("aria-label","Selected element CSS selector");` +
+  `inp.addEventListener("focus",function(){inp.select()});` +
+  `inp.addEventListener("click",function(){inp.select()});` +
+  `var meta=document.createElement("span");` +
+  `meta.className="fb-inspect-meta";` +
+  `meta.textContent=el.tagName.toLowerCase()+"  "+Math.round(r.width)+"x"+Math.round(r.height);` +
+  `status=document.createElement("span");status.className="fb-inspect-status";status.setAttribute("role","status");` +
+  `var x=document.createElement("button");` +
+  `x.type="button";x.className="fb-inspect-copy";x.title="Copy selector";` +
+  `x.setAttribute("aria-label","Copy selector and close");x.textContent="✕";` +
+  `x.addEventListener("click",function(ev){ev.stopPropagation();fbInspCopyD(sel).then(function(){teardown()})});` +
+  `out.appendChild(inp);out.appendChild(meta);` +
+  `wrap.appendChild(out);render();` +
+  `fbInspCopyD(sel).then(function(ok){` +
+  `if(!out||out.getAttribute("data-sel")!==sel&&out.dataset.sel!==sel){}` +
+  `status.className="fb-inspect-status "+(ok?"ok":"fail");` +
+  `status.textContent=ok?"Copied":"Copy failed - select and copy manually";` +
+  `wrap.appendChild(status)})})});` +
+  `return wrap}` +
+  // Mount beside the panel launcher's "+". That button is found by its class and its aria-label,
+  // which are SOURCE strings - they survive minification, which is the entire reason this tier
+  // exists. A MutationObserver covers the panel appearing after load.
+  `(function fbInspDom(){` +
+  `var wrap=null;` +
+  `function host(){return document.querySelector('button.panel-add[aria-label="Open panel tab"]')}` +
+  `function tryMount(){` +
+  `if(wrap&&wrap.isConnected)return true;` +
+  `var b=host();` +
+  `if(!b||!b.parentNode)return false;` +
+  `wrap=fbInspUi();` +
+  `b.parentNode.insertBefore(wrap,b);` +
+  `return true}` +
+  `function start(){if(tryMount())return;` +
+  `var mo=new MutationObserver(function(){if(tryMount())mo.disconnect()});` +
+  `mo.observe(document.documentElement,{childList:true,subtree:true});` +
+  `window.setTimeout(function(){mo.disconnect()},60000)}` +
+  `if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",start);else start()})()`
+
 // Each edit: an anchor that must exist exactly once, and the text that replaces it.
 export const EDITS = [
   {
@@ -320,13 +459,46 @@ async function esmProblem(src) {
   }
 }
 
+// Which tier-1 anchors are missing, and how many places each one was found. Computed on every
+// run, not just the first: after a fallback patch the file is `original + DOMFALLBACK`, so the
+// anchors are still absent and the same answer comes back - which is what lets ensure.sh
+// fingerprint the breakage identically on a re-run and stay quiet.
+function missingAnchors(src) {
+  const missing = []
+  for (const edit of EDITS) {
+    const hits = src.split(edit.from).length - 1
+    if (hits !== 1) missing.push({ id: edit.id, hits })
+  }
+  return missing
+}
+
+// The banner is the ONLY signal ensure.sh has, because exit 0 no longer distinguishes the tiers.
+// It is printed on a first patch AND on every later no-op run, or an idempotent re-run would read
+// as "tier 1, all well" and undo the degraded state.
+function tier2Banner(missing) {
+  console.error(
+    `fb-element-selector: tier-1 anchors did not resolve, using the DOM fallback:\n` +
+      missing.map((m) => `  ${m.id} (${m.hits} matches for its anchor)`).join('\n') +
+      `\n  The inspector will still work, but it mounts as plain DOM rather than as a React\n` +
+      `  component. Re-anchor EDITS to get tier 1 back.`,
+  )
+  // One machine-readable line, on its own, so a caller can fingerprint the breakage WITHOUT the
+  // surrounding prose or the file names (both of which vary between a first run and a re-run).
+  console.error(
+    `fb-element-selector: tier=2 missing=` + missing.map((m) => `${m.id}:${m.hits}`).join(','),
+  )
+}
+
 async function main() {
   const argv = process.argv.slice(2)
   if (argv.includes('--revert')) return revert()
 
   const js = read(JS_FILE)
   const css = read(CSS_FILE)
-  const alreadyJs = js.includes(`function fbInspPick(on){`)
+  // Two independent markers, because either tier may be the one that landed. `fbInspPick(on)` is
+  // tier 1's picker; `fbInspDom` is tier 2's bootstrap. Checking only one would make the patcher
+  // re-append on every run after a fallback patch.
+  const alreadyJs = js.includes(`function fbInspPick(on){`) || js.includes('function fbInspDom()')
   const alreadyCss = css.includes('.fb-inspect-out')
   const needsRename = !isRenamed(JS_FILE)
   const renamedOk = readFileSync(INDEX_HTML, 'utf8').includes(
@@ -335,10 +507,15 @@ async function main() {
 
   if (alreadyJs && alreadyCss && renamedOk) {
     console.error(`already patched: ${path.basename(JS_FILE)}, ${path.basename(CSS_FILE)}`)
+    // An install patched via the fallback keeps reporting fallback mode forever, however many
+    // times the agent fires. Without this the second run would look like tier 1 and the user
+    // would never be told to re-anchor.
+    if (js.includes('function fbInspDom()')) tier2Banner(missingAnchors(js))
     return argv.includes('--check') ? 1 : 0
   }
   // Patched in a previous run that died before re-anchoring: finish that step, touch nothing else.
   if (alreadyJs && alreadyCss) {
+    if (js.includes('function fbInspDom()')) tier2Banner(missingAnchors(js))
     if (argv.includes('--check')) {
       console.error('patched but not re-anchored: index.html still points at the old asset URL')
       return 1
@@ -347,16 +524,22 @@ async function main() {
     return 0
   }
 
+  // Tier 1 first: the React component, which integrates properly. If ANY anchor fails to resolve
+  // exactly once, fall back to tier 2 rather than writing a half-patched bundle - a working
+  // inspector that survives renumbering beats a prettier one that does not.
   let out = js
   const missing = []
   for (const edit of EDITS) {
     const hits = out.split(edit.from).length - 1
-    if (hits !== 1) missing.push(`${edit.id} (${hits} matches for its anchor)`)
+    if (hits !== 1) missing.push({ id: edit.id, hits })
     else out = out.replace(edit.from, edit.to)
   }
-  if (missing.length) {
-    console.error(`fb-element-selector: anchors gone, nothing written:\n  ${missing.join('\n  ')}`)
-    return 2
+  const tier = missing.length ? 2 : 1
+  if (tier === 2) {
+    // Tier 2 needs no anchors at all: it is appended, so "insertion-only" still holds and
+    // reversing it is a suffix removal.
+    out = `${js}${DOMFALLBACK}`
+    tier2Banner(missing)
   }
 
   const outCss = alreadyCss ? css : `${css}${CSS}`

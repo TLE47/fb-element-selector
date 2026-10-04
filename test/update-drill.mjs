@@ -15,7 +15,7 @@
 // USAGE  node --experimental-vm-modules test/update-drill.mjs
 
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import path from 'node:path'
 import os from 'node:os'
 import { fileURLToPath } from 'node:url'
@@ -150,30 +150,83 @@ try {
   const brokenDir2 = mkdtempSync(path.join(os.tmpdir(), 'fb-es-notify-'))
   const brokenAssets2 = path.join(brokenDir2, 'assets')
   mkdirSync(brokenAssets, { recursive: true })
-  writeFileSync(path.join(brokenAssets, 'index-XYZZY.js'), 'x'.repeat(1_100_000))
-  writeFileSync(path.join(brokenAssets, 'index-XYZZY.css'), 'y'.repeat(120_000))
+  // Valid JS with BOTH tier-1 anchors defeated - which is what an update that renumbers the
+  // bundle actually looks like. Two earlier fixtures were wrong in instructive ways: a buffer of
+  // 'x' is rejected by the parse guard, and blanking each anchor's text with a comment leaves a
+  // dangling comma (`...{id:"preview"` -> `/*gone*/,{id:...`), which is ALSO a parse failure. Both
+  // looked like a broken fallback and were really a broken test.
+  //
+  // Renumbering is the honest simulation, and it is what a rebuild actually does. The new names
+  // are prefixed so they cannot collide with an existing binding - a plain rename like nU -> xQ
+  // fails to parse with "Identifier 'xQ' has already been declared".
+  const { EDITS: allEdits } = await import('../src/patch.mjs')
+  const renumber = (text, subs) => {
+    let out = text
+    for (const [from, to] of subs) out = out.replace(new RegExp(`\\b${from}\\b`, 'g'), to)
+    return out
+  }
+  const moved = renumber(readFileSync(path.join(BACKUP, pristineJs), 'latin1'), [
+    ['nU', 'fbq0'],
+    ['d', 'fbq1'],
+    ['le', 'fbq2'],
+  ])
+  let movedProblem = null
+  try {
+    new (await import('node:vm')).SourceTextModule(moved, { identifier: 'moved-anchor fixture' })
+  } catch (error) {
+    movedProblem = String(error.message).slice(0, 100)
+  }
+  ok('drill: the moved-anchor fixture is valid JS, so it reaches the fallback not the parse guard',
+    movedProblem === null && moved.split(allEdits[0].from).length - 1 === 0,
+    movedProblem || `hits=${allEdits.map((e) => moved.split(e.from).length - 1).join(',')}`)
+  writeFileSync(path.join(brokenAssets, 'index-XYZZY.js'), moved)
+  writeFileSync(path.join(brokenAssets, 'index-XYZZY.css'), readFileSync(path.join(BACKUP, pristineCss), 'latin1'))
   writeFileSync(path.join(brokenDir, 'index.html'), '<link rel="stylesheet" href="/assets/index-XYZZY.css"><script type="module" src="/assets/index-XYZZY.js">')
-  let brokeCode = null
+  // An unrecognisable bundle used to be REFUSED (exit 2). That contract changed on purpose: it is
+  // now handled by the tier-2 DOM fallback, which needs no anchors at all. The old expectation
+  // would have failed here, and the right response was to change the assertion - the behaviour
+  // being asserted is the behaviour that is now wanted.
+  let brokeCode = 0
   try {
     execFileSync(process.execPath, [patcher], { env: { ...process.env, ...drillEnv, ASSETS: brokenAssets }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
   } catch (error) {
     brokeCode = error.status
   }
-  ok('drill: a bundle with no matching anchor is refused, not patched', brokeCode === 2, `exit ${brokeCode}`)
-  ok('drill: the refused bundle is untouched', readFileSync(path.join(brokenAssets, 'index-XYZZY.js'), 'latin1') === 'x'.repeat(1_100_000))
+  ok('drill: an unrecognisable bundle no longer fails the patch', brokeCode === 0, `exit ${brokeCode}`)
+  const fallbackPath = path.join(brokenAssets, 'index-XYZZY-fb-inspect.js')
+  ok('drill: it lands the DOM fallback instead', existsSync(fallbackPath) &&
+    readFileSync(fallbackPath, 'latin1').includes('function fbInspDom()'))
+  ok('drill: the fallback tier carries no tier-1 component', existsSync(fallbackPath) &&
+    !readFileSync(fallbackPath, 'latin1').includes('function fbInspPick(on){'))
 
   mkdirSync(brokenAssets2, { recursive: true })
-  writeFileSync(path.join(brokenAssets2, 'index-QQQQ1.js'), 'x'.repeat(1_100_000))
-  writeFileSync(path.join(brokenAssets2, 'index-QQQQ1.css'), 'y'.repeat(120_000))
+  writeFileSync(path.join(brokenAssets2, 'index-QQQQ1.css'), readFileSync(path.join(BACKUP, pristineCss), 'latin1'))
   writeFileSync(path.join(brokenDir2, 'index.html'), '<link rel="stylesheet" href="/assets/index-QQQQ1.css"><script type="module" src="/assets/index-QQQQ1.js">')
-  const brokenEnv = { ...env, ASSETS: brokenAssets2 }
-  const brokenRun = () => execFileSync('/bin/bash', [ensure], { encoding: 'utf8', env: brokenEnv })
+  // A DIFFERENT breakage than the one above: the real release with exactly ONE anchor's text
+  // replaced. Still valid JS, so it reaches the fallback rather than the parse guard, and its
+  // fingerprint differs - which is what must let it through the dedupe.
+  writeFileSync(
+    path.join(brokenAssets2, 'index-QQQQ1.js'),
+    renumber(readFileSync(path.join(BACKUP, pristineJs), 'latin1'), [['ae', 'fbq9']]),
+  )
+  // The ensure stage runs against its OWN copy of the moved-anchor bundle, so its first run is a
+  // genuine first patch. (An earlier revision ran it against a buffer of 'x', which the parse
+  // guard rightly rejects with exit 3 - so it was testing the error path and calling it the
+  // fallback path.)
+  const brokenDir3 = mkdtempSync(path.join(os.tmpdir(), 'fb-es-fallback-'))
+  const brokenAssets3 = path.join(brokenDir3, 'assets')
+  mkdirSync(brokenAssets3, { recursive: true })
+  writeFileSync(path.join(brokenAssets3, 'index-MMMM1.js'), moved)
+  writeFileSync(path.join(brokenAssets3, 'index-MMMM1.css'), readFileSync(path.join(BACKUP, pristineCss), 'latin1'))
+  writeFileSync(path.join(brokenDir3, 'index.html'), '<link rel="stylesheet" href="/assets/index-MMMM1.css"><script type="module" src="/assets/index-MMMM1.js">')
+  const brokenEnv = { ...env, ASSETS: brokenAssets3 }
+  const brokenRun = (e = brokenEnv) => execFileSync('/bin/bash', [ensure], { encoding: 'utf8', env: e })
 
   brokenRun()
   const firstNotice = inboxText()
-  ok('drill: a moved anchor raises a notification', /needs re-anchoring/.test(firstNotice), firstNotice.trim().split('\n')[0]?.slice(0, 80))
-  ok('drill: the notification names the app version and the log', /Freebuff/.test(firstNotice) && /fb-element-selector\.log|ensure\.log/.test(firstNotice))
-  ok('drill: the broken state is recorded for dedupe', readFileSync(ensureState, 'utf8').trim().startsWith('broken:'))
+  ok('drill: a moved anchor raises a degraded-mode notification', /fallback mode/.test(firstNotice), firstNotice.trim().split('\n')[0]?.slice(0, 80))
+  ok('drill: the notification says it still works and points at the log', /still works/.test(firstNotice) && /fb-element-selector\.log|ensure\.log/.test(firstNotice))
+  ok('drill: the fallback state is recorded for dedupe', readFileSync(ensureState, 'utf8').trim().startsWith('fallback:'))
 
   // The reason the fingerprint exists: a WatchPaths agent can fire repeatedly while the breakage
   // persists, and re-blaming the user each time trains them to ignore the banner.
@@ -181,18 +234,21 @@ try {
   brokenRun()
   ok('drill: the same breakage does not notify again', inboxText() === firstNotice)
   ok('drill: the repeat run says so in the log', /not notifying again/.test(readFileSync(ensureLog, 'utf8')))
+  // The re-run banner. Without this the second agent fire reports "already patched" with no tier,
+  // ensure.sh reads it as tier 1 and resets the state to `ok` - the notification would then be a
+  // one-shot the user almost certainly never sees, since WatchPaths fires repeatedly.
+  // spawnSync, not execFileSync: the banner goes to stderr, and execFileSync only hands stderr
+  // back when the child FAILS - which here it does not.
+  const again = spawnSync(process.execPath, ['--experimental-vm-modules', '--no-warnings', patcher],
+    { env: { ...process.env, ...brokenEnv, ASSETS: brokenAssets3 }, encoding: 'utf8' })
+  ok('drill: an idempotent re-run still reports fallback mode',
+    again.status === 0 && /using the DOM fallback/.test(again.stderr),
+    `exit ${again.status}: ${(again.stderr || '').trim().split('\n').pop()?.slice(0, 60)}`)
 
-  // A DIFFERENT breakage is new information and must get through. The fingerprint is over the
-  // patcher's OUTPUT, so the bundle has to actually fail differently: take the real release and
-  // remove one anchor's text, so exactly one anchor goes missing instead of all of them.
-  const { EDITS: table } = await import('../src/patch.mjs')
-  const victim = table.find((e) => e.id === 'mount')
-  writeFileSync(
-    path.join(brokenAssets2, 'index-QQQQ1.js'),
-    readFileSync(path.join(BACKUP, pristineJs), 'latin1').replace(victim.from, ']}'),
-  )
-  brokenRun()
-  ok('drill: a different breakage notifies again', (inboxText().match(/needs re-anchoring/g) || []).length === 2 && /mount/.test(readFileSync(ensureLog, 'utf8')))
+  // A DIFFERENT breakage is new information and must get through.
+  brokenRun({ ...brokenEnv, ASSETS: brokenAssets2 })
+  ok('drill: a different breakage notifies again', (inboxText().match(/fallback mode/g) || []).length === 2 && /mount/.test(readFileSync(ensureLog, 'utf8')),
+    `notices=${(inboxText().match(/fallback mode/g) || []).length} state=${readFileSync(ensureState, 'utf8').trim()}`)
 
   // And recovery must be announced, or the user never learns they can stop holding their breath.
   runEnsure()
@@ -204,6 +260,7 @@ try {
 
   rmSync(brokenDir, { recursive: true, force: true })
   rmSync(brokenDir2, { recursive: true, force: true })
+  rmSync(brokenDir3, { recursive: true, force: true })
 
   // --- the isolation guard ---------------------------------------------------------------------
   // Every run above used a staged bundle; this proves none of them reached the installed app or

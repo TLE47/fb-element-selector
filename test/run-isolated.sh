@@ -36,5 +36,10 @@ echo "== update-drill.mjs =="
 drill=$?
 
 echo
-echo "inspector_exit=$inspector drill_exit=$drill"
-exit $(( inspector | drill ))
+echo "== dom-fallback.test.mjs =="
+"$NODE" --experimental-vm-modules --no-warnings "$HERE/test/dom-fallback.test.mjs"
+fallback=$?
+
+echo
+echo "inspector_exit=$inspector drill_exit=$drill fallback_exit=$fallback"
+exit $(( inspector | drill | fallback ))

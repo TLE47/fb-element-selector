@@ -100,25 +100,56 @@ status=$?
 
 case "$status" in
   0)
+    # Exit 0 no longer means "tier 1". A bundle whose anchors moved is now PATCHED - via the DOM
+    # fallback - so the signal that an update moved the anchors is the tier, not the exit code.
+    case "$out" in
+      *"using the DOM fallback"*)
+        say "DEGRADED: patched, but via the DOM fallback - the tier-1 anchors have moved."
+        say "           The inspector works; re-anchor EDITS in src/patch.mjs for the React version."
+        # Fingerprint the patcher's machine line, not its whole output: the prose names files and
+        # alternates between "patched" and "already patched" from run to run, so hashing all of
+        # it would make every run look like a NEW breakage and notify every time.
+        fingerprint="$(printf '%s\n' "$out" | grep -m1 '^fb-element-selector: tier=' | cksum | cut -d' ' -f1)"
+        write_state "fallback:$fingerprint"
+        # Compare the WHOLE state string, not the `fallback:` prefix: a new release that moved a
+        # DIFFERENT anchor is new information and must get through. (Matching `fallback:*` here
+        # silenced it, which is the one thing the dedupe must never do.)
+        case "$previous" in
+          "fallback:$fingerprint")
+            say "           (already notified for this exact breakage; not notifying again)"
+            ;;
+          *)
+            detail="$(printf '%s\n' "$out" | grep -m1 '^fb-element-selector: tier=')"
+            # Log WHICH anchors moved - that is the whole of what someone has to go re-anchor,
+            # and it is what makes a second, different breakage recognisable in the log.
+            printf '%s\n' "$out" | while IFS= read -r line; do say "           $line"; done
+            notify "Freebuff element selector running in fallback mode" \
+              "Freebuff $(app_version) moved the patch anchors, so the inspector mounted as plain DOM instead of React. It still works. $detail See $LOG"
+            ;;
+        esac
+        ;;
+      *)
     say "OK: patch is in place${out:+ - $out}"
     write_state "ok"
     # A recovery deserves a notification too: if you were told it was broken, silence would leave
     # you not knowing to reload and check.
     case "$previous" in
-      broken:*)
+      fallback:*|broken:*)
         say "RECOVERED: the patch anchors match again - reload the app (View > Reload App)"
         notify "Freebuff element selector recovered" \
-          "The inspector is patched again on $(app_version). Reload the app to pick it up."
+          "The inspector is patched again as a React component on $(app_version). Reload the app to pick it up."
         ;;
     esac
+    ;;          # end of the inner case: tier-1 (no fallback banner)
+    esac        # end of the case on $out
     ;;
   2)
-    say "ATTENTION: the app update moved the patch anchors; nothing was written."
+    say "ATTENTION: neither tier could be applied; nothing was written."
     say "           Re-anchor EDITS in $PATCHER against the new bundle."
     printf '%s\n' "$out" | while IFS= read -r line; do say "           $line"; done
     # Fingerprint the failure from the patcher's own message: identical output on a later run
     # means nothing new happened, so stay quiet.
-    fingerprint="$(printf '%s' "$out" | cksum | cut -d' ' -f1)"
+    fingerprint="$(printf '%s\n' "$out" | cksum | cut -d' ' -f1)"
     write_state "broken:$fingerprint"
     case "$previous" in
       "broken:$fingerprint")
