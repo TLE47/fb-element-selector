@@ -42,3 +42,8 @@ Three moments from the clip, so the README can show the behaviour without asking
   one gesture that is coming
 - **hovering** — the outline and its `tag.classes WxH` label track the pointer
 - **picked** — the resolved selector is in the readout, and it is already on your clipboard
+## Why a WebP and not a video
+
+It ships as **lossless animated WebP**, not video and not GIF — a Markdown page renders an image
+pixel for pixel, where a video would be decoded through a codec behind a poster frame and a play
+button. That matters most on a repository page, where the demo is the first thing a visitor sees.

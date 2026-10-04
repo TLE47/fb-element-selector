@@ -22,11 +22,6 @@ node src/patch.mjs
 
 Then **reload Freebuff** — `View ▸ Reload App`, or quit and reopen.
 
-> It ships as **lossless animated WebP**, not video and not GIF — a Markdown page renders an image
-pixel for pixel, where a video would be decoded through a codec behind a poster frame and a play
-button. See [docs/demo](https://github.com/TLE47/fb-element-selector/blob/main/docs/demo/README.md)
-for the toolchain and the numbers.
-
 ## Use it
 
 Click the magnifier, then hover an element. A purple outline follows your cursor and labels what
@@ -90,6 +85,7 @@ does not, re-sign with `codesign --force --deep --sign - /Applications/Freebuff.
 
 - [How it works, and the traps](https://github.com/TLE47/fb-element-selector/blob/main/docs/PATCHING.md)
 - [Running the tests](https://github.com/TLE47/fb-element-selector/blob/main/docs/PATCHING.md#tests)
+- [About the demo clip](https://github.com/TLE47/fb-element-selector/blob/main/docs/demo/README.md)
 
 ## License
 
