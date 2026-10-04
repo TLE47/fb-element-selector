@@ -12,6 +12,10 @@
 // serving a URL that did not exist. The isolation assertions at the end are the regression test
 // for that, and they are proven to be able to fail.
 //
+// It needs the pristine pre-patch bytes, which live in the patcher's backup directory. On a
+// machine where the app has never been patched there is nothing to stage from and it exits 2
+// with an explanation; bash test/run-isolated.sh is the path that needs no prior state.
+//
 // USAGE  node --experimental-vm-modules test/update-drill.mjs
 
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
@@ -31,10 +35,31 @@ const ok = (name, pass, detail = '') => {
 }
 
 // The pristine, never-patched originals: that is what a new release would ship.
-const pristineJs = readdirSync(BACKUP).find((f) => /^index-[\w-]+\.js$/.test(f) && !f.endsWith('.orig'))
-const pristineCss = readdirSync(BACKUP).find((f) => /^index-[\w-]+\.css$/.test(f) && !f.endsWith('.orig'))
+//
+// existsSync BEFORE readdirSync. Without it a missing backup directory threw at module scope and
+// surfaced as a raw Node stack trace - so a fresh clone, where the drill legitimately cannot run,
+// looked like a crash rather than the instruction it actually is. This is the same bug the patcher
+// had with its asset lookup; check the precondition, then say what to do about it.
+if (!existsSync(BACKUP)) {
+  console.error(
+    `fb-element-selector: no pristine backup in ${BACKUP}\n` +
+      `  The drill needs the pre-patch bytes to stage a fake release from.\n` +
+      `  Either patch the app once (node src/patch.mjs) so a backup exists, or run\n` +
+      `  bash test/run-isolated.sh - which stages its own pristine copy and needs none.`,
+  )
+  process.exit(2)
+}
+const backupFiles = readdirSync(BACKUP)
+const pristineJs = backupFiles.find((f) => /^index-[\w-]+\.js$/.test(f) && !f.endsWith('.orig'))
+const pristineCss = backupFiles.find((f) => /^index-[\w-]+\.css$/.test(f) && !f.endsWith('.orig'))
 if (!pristineJs || !pristineCss) {
-  console.error(`no pristine pre-patch backup in ${BACKUP}; run \`node src/patch.mjs --revert\` first`)
+  console.error(
+    `fb-element-selector: ${BACKUP} holds no pristine index-*.js / index-*.css pair\n` +
+      `  found: ${backupFiles.join(', ') || '(empty)'}\n` +
+      `  The *.orig files are NOT it - those are the bytes as they were at RENAME time, so on\n` +
+      `  an already-patched app they are already patched. Use \`node src/patch.mjs --revert\`, which\n` +
+      `  restores the true originals and leaves a usable backup, or run bash test/run-isolated.sh.`,
+  )
   process.exit(2)
 }
 

@@ -134,11 +134,13 @@ breakage stays quiet, a *different* moved anchor notifies again, and recovery an
 mounts left of the `+`, arms, outlines, picks without activating the element, resolves a selector,
 copies it, and cancels on Escape.
 
-Both suites read the installed app, so run them after patching. To verify from untouched bytes
-instead — CI, or a machine where the app is not patched:
+Both suites read the installed app, so run them after patching. **On a fresh clone with nothing
+patched yet, `npm run test:update` exits 2 with an explanation** — it needs the pristine pre-patch
+bytes to stage a fake release from, and there are none. Use the isolated runner, which stages its
+own pristine copy and needs no prior state:
 
 ```sh
-bash test/run-isolated.sh
+bash test/run-isolated.sh    # all three suites, from untouched bytes; works on a fresh clone
 ```
 
 ---
