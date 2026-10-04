@@ -7,12 +7,14 @@ purple outline tracks whatever you hover, labelled with its tag, classes and pix
 to select it and read a CSS selector you can paste straight into devtools.
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│  [🔍]  [Go to panel ▾]  [New note]        [+]             │
-│   ▲                                                       │
-│   the inspector                                          │
-└──────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────┐
+│  Browser │ Files │ Terminal │ Changes │ Note   [🔍]  [+]     │
+│                                             ▲               │
+│                                             the inspector  │
+└────────────────────────────────────────────────────────────┘
 ```
+
+The magnifier is the last control before the `+` that opens the panel launcher.
 
 ## Why this exists when the app already has one
 
@@ -55,7 +57,7 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.freebuff.patch-ensur
 ```
 
 It runs on every login and whenever anything under `Freebuff.app` changes, so an update landing
-mid-session is picked up within about a minute.
+mid-session is picked up within about a minute (the agent has a 30-second throttle).
 
 If an update ever moves the anchors — renames the panel-tab list, the store's panel-id list, or
 the tab strip's markup — the agent deliberately does **nothing** and tells you:
