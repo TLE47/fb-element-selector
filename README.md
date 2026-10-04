@@ -7,8 +7,8 @@
 [![Tests: 117](https://img.shields.io/badge/tests-117-passing-brightgreen)](https://github.com/TLE47/fb-element-selector/blob/main/docs/PATCHING.md)
 [![MIT](https://img.shields.io/badge/license-MIT-green)](https://github.com/TLE47/fb-element-selector/blob/main/LICENSE)
 
-A DevTools-style element inspector for the [Freebuff](https://freebuff.com) desktop app. Click the
-magnifier in the right panel, hover anything, and click to copy its selector.
+A DevTools-style element inspector for the [Freebuff](https://freebuff.com) desktop app. It adds a
+magnifier to the right panel — click it, hover anything, click to copy that element's selector.
 
 ![the inspector armed, hovering an element, and the selector it produced](https://raw.githubusercontent.com/TLE47/fb-element-selector/main/docs/demo/demo.webp)
 
@@ -36,8 +36,11 @@ is under it. Click to copy the selector — the readout confirms the copy worked
 
 ## Keep it across updates
 
-App updates replace the bundle, which drops the patch. One command puts a small agent in place that
-re-applies it for you:
+Optional, but worth it: app updates drop the patch, and this puts a small background agent in place
+that re-applies it for you.
+
+<details>
+<summary>Show the commands</summary>
 
 ```sh
 mkdir -p ~/Library/LaunchAgents
@@ -46,14 +49,25 @@ sed "s#__REPO__#$PWD#g; s#__HOME__#$HOME#g" launchd/com.fb.element-selector.plis
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.fb.element-selector.plist
 ```
 
-If a future update ever breaks it, you get one notification — and it keeps working in a plainer
-form rather than disappearing. You never have to read a log to find out.
+To remove it again:
+
+```sh
+launchctl bootout gui/$(id -u)/com.fb.element-selector
+rm ~/Library/LaunchAgents/com.fb.element-selector.plist
+```
+
+</details>
+
+With it installed, a future update can never silently take the inspector away: if something changes
+underneath, you get one notification and it keeps working in a plainer form. You never have to read
+a log to find out.
 
 ## Undo
 
+To put the app back exactly as it shipped:
+
 ```sh
-node src/patch.mjs --revert                    # restore the original app files
-launchctl bootout gui/$(id -u)/com.fb.element-selector   # if you installed the agent
+node src/patch.mjs --revert
 ```
 
 ## If something looks wrong
