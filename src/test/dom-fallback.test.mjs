@@ -23,7 +23,7 @@ const ok = (name, pass, detail = '') => {
   console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? ` - ${detail}` : ''}`)
 }
 
-const { EDITS, DOMFALLBACK } = await import('../src/patch.mjs')
+const { EDITS, DOMFALLBACK } = await import('../patch.mjs')
 if (!existsSync(path.join(HARNESS, 'react', 'index.js')) && !existsSync(path.join(HARNESS, 'node_modules', 'react', 'index.js'))) {
   console.error('\nSKIP: run `npm install` first.')
   process.exit(2)

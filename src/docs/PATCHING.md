@@ -325,7 +325,7 @@ bytes to stage a fake release from, and there are none. Use the isolated runner,
 own pristine copy and needs no prior state:
 
 ```sh
-bash test/run-isolated.sh    # all three suites, from untouched bytes; works on a fresh clone
+bash src/src/test/run-isolated.sh    # all three suites, from untouched bytes; works on a fresh clone
 ```
 
 That runner is the one to trust in CI: it never reads the installed app, so its result is the same

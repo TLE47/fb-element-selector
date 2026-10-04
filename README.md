@@ -4,13 +4,13 @@
 
 [![Node 20+](https://img.shields.io/badge/node-20%2B-brightgreen)](#install)
 [![macOS](https://img.shields.io/badge/platform-macOS-lightgrey)](#install)
-[![Tests: 117](https://img.shields.io/badge/tests-117-passing-brightgreen)](https://github.com/TLE47/fb-element-selector/blob/main/docs/PATCHING.md)
-[![MIT](https://img.shields.io/badge/license-MIT-green)](https://github.com/TLE47/fb-element-selector/blob/main/LICENSE)
+[![Tests: 117](https://img.shields.io/badge/tests-117-passing-brightgreen)](https://github.com/TLE47/fb-element-selector/blob/main/src/docs/PATCHING.md)
+[![MIT](https://img.shields.io/badge/license-MIT-green)](https://github.com/TLE47/fb-element-selector/blob/main/src/LICENSE)
 
 A DevTools-style element inspector for the [Freebuff](https://freebuff.com) desktop app. It adds a
 magnifier to the right panel — click it, hover anything, click to copy that element's selector.
 
-![the inspector armed, hovering an element, and the selector it produced](https://raw.githubusercontent.com/TLE47/fb-element-selector/main/docs/demo/demo.webp)
+![the inspector armed, hovering an element, and the selector it produced](https://raw.githubusercontent.com/TLE47/fb-element-selector/main/src/docs/demo/demo.webp)
 
 ## Install
 
@@ -39,7 +39,7 @@ that re-applies it for you.
 
 ```sh
 mkdir -p ~/Library/LaunchAgents
-sed "s#__REPO__#$PWD#g; s#__HOME__#$HOME#g" launchd/com.fb.element-selector.plist \
+sed "s#__REPO__#$PWD#g; s#__HOME__#$HOME#g" src/launchd/com.fb.element-selector.plist \
   > ~/Library/LaunchAgents/com.fb.element-selector.plist
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.fb.element-selector.plist
 ```
@@ -83,9 +83,9 @@ does not, re-sign with `codesign --force --deep --sign - /Applications/Freebuff.
 
 ## Want the details?
 
-- [How it works, and the traps](https://github.com/TLE47/fb-element-selector/blob/main/docs/PATCHING.md)
-- [Running the tests](https://github.com/TLE47/fb-element-selector/blob/main/docs/PATCHING.md#tests)
-- [About the demo clip](https://github.com/TLE47/fb-element-selector/blob/main/docs/demo/README.md)
+- [How it works, and the traps](https://github.com/TLE47/fb-element-selector/blob/main/src/docs/PATCHING.md)
+- [Running the tests](https://github.com/TLE47/fb-element-selector/blob/main/src/docs/PATCHING.md#tests)
+- [About the demo clip](https://github.com/TLE47/fb-element-selector/blob/main/src/docs/demo/README.md)
 
 ## License
 

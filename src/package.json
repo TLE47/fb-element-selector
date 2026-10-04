@@ -16,10 +16,10 @@
     "node": ">=20"
   },
   "scripts": {
-    "patch": "node src/patch.mjs",
-    "check": "node src/patch.mjs --check",
-    "revert": "node src/patch.mjs --revert",
-    "ensure": "bash src/ensure.sh",
+    "patch": "node patch.mjs",
+    "check": "node patch.mjs --check",
+    "revert": "node patch.mjs --revert",
+    "ensure": "bash ensure.sh",
     "test": "node --experimental-vm-modules test/inspector.test.mjs",
     "test:update": "node --experimental-vm-modules test/update-drill.mjs",
     "test:all": "npm run test:update && npm run test:fallback && npm test",
@@ -31,8 +31,12 @@
     "react-dom": "^19.0.0"
   },
   "files": [
-    "src",
-    "README.md",
+    "patch.mjs",
+    "ensure.sh",
+    "test",
+    "docs",
+    "launchd",
+    "../README.md",
     "LICENSE"
   ]
 }

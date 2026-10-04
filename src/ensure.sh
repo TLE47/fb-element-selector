@@ -23,11 +23,11 @@
 
 set -uo pipefail
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PATCHER="$HERE/src/patch.mjs"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PATCHER="$HERE/patch.mjs"
 APP="/Applications/Freebuff.app"
 SCRATCH="$HOME/.fb-scratch"
-# These are overridable so test/update-drill.sh can exercise this against a staged bundle without
+# These are overridable so test/update-drill.mjs can exercise this against a staged bundle without
 # touching the real log, the real app, or the real backup directory.
 LOG="${FREEBUFF_PATCH_LOG:-$SCRATCH/fb-element-selector.log}"
 STATE="${FREEBUFF_PATCH_STATE:-$SCRATCH/fb-element-selector.state}"

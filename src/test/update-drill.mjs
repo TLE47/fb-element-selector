@@ -14,7 +14,7 @@
 //
 // It needs the pristine pre-patch bytes, which live in the patcher's backup directory. On a
 // machine where the app has never been patched there is nothing to stage from and it exits 2
-// with an explanation; bash test/run-isolated.sh is the path that needs no prior state.
+// with an explanation; bash src/test/run-isolated.sh is the path that needs no prior state.
 //
 // USAGE  node --experimental-vm-modules test/update-drill.mjs
 
@@ -45,7 +45,7 @@ if (!existsSync(BACKUP)) {
     `fb-element-selector: no pristine backup in ${BACKUP}\n` +
       `  The drill needs the pre-patch bytes to stage a fake release from.\n` +
       `  Either patch the app once (node src/patch.mjs) so a backup exists, or run\n` +
-      `  bash test/run-isolated.sh - which stages its own pristine copy and needs none.`,
+      `  bash src/test/run-isolated.sh - which stages its own pristine copy and needs none.`,
   )
   process.exit(2)
 }
@@ -58,7 +58,7 @@ if (!pristineJs || !pristineCss) {
       `  found: ${backupFiles.join(', ') || '(empty)'}\n` +
       `  The *.orig files are NOT it - those are the bytes as they were at RENAME time, so on\n` +
       `  an already-patched app they are already patched. Use \`node src/patch.mjs --revert\`, which\n` +
-      `  restores the true originals and leaves a usable backup, or run bash test/run-isolated.sh.`,
+      `  restores the true originals and leaves a usable backup, or run bash src/test/run-isolated.sh.`,
   )
   process.exit(2)
 }
@@ -93,8 +93,8 @@ try {
   const pristineBytes = readFileSync(path.join(assets, newJs), 'latin1')
   ok('drill: the staged bundle really is unpatched', !pristineBytes.includes('function fbInspPick(on){'))
 
-  const patcher = path.join(ROOT, 'src', 'patch.mjs')
-  const ensure = path.join(ROOT, 'src', 'ensure.sh')
+  const patcher = path.join(ROOT, 'patch.mjs')
+  const ensure = path.join(ROOT, 'ensure.sh')
   const run = (args, env = {}) =>
     execFileSync(process.execPath, args, {
       env: { ...process.env, ASSETS: assets, ...drillEnv, ...env },
@@ -179,7 +179,7 @@ try {
   ok('drill: the app decode would not see a stray continuation byte',
     !/[\x80-\xBF]/.test(injectedBytes.join('')), 'no lone UTF-8 continuation byte in injected code')
 
-  const { EDITS } = await import('../src/patch.mjs')
+  const { EDITS } = await import('../patch.mjs')
   let restored = patched
   for (const edit of EDITS) restored = restored.replace(edit.to, edit.from)
   ok('drill: reversing the edits restores the new release byte for byte', restored === pristineBytes)
@@ -221,7 +221,7 @@ try {
   // Renumbering is the honest simulation, and it is what a rebuild actually does. The new names
   // are prefixed so they cannot collide with an existing binding - a plain rename like nU -> xQ
   // fails to parse with "Identifier 'xQ' has already been declared".
-  const { EDITS: allEdits } = await import('../src/patch.mjs')
+  const { EDITS: allEdits } = await import('../patch.mjs')
   const renumber = (text, subs) => {
     let out = text
     for (const [from, to] of subs) out = out.replace(new RegExp(`\\b${from}\\b`, 'g'), to)

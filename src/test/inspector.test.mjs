@@ -27,7 +27,7 @@ const ok = (name, pass, detail = '') => {
   console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? ` - ${detail}` : ''}`)
 }
 
-const { EDITS, MARK, CSS: CSS_RULES, INSPECT } = await import('../src/patch.mjs')
+const { EDITS, MARK, CSS: CSS_RULES, INSPECT } = await import('../patch.mjs')
 
 if (!existsSync(ASSETS)) {
   console.error(`no assets at ${ASSETS}; is the app installed?`)

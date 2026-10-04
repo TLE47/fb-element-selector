@@ -1,8 +1,9 @@
 #!/bin/bash
-# Run both suites against a staged, pristine bundle so the result does not depend on whatever
+# Run all three suites against a staged, pristine bundle so the result does not depend on whatever
 # else happens to be patched in the installed app right now. Leaves the app untouched.
 set -uo pipefail
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # -> src/
+TESTS="$HERE/test"
 NODE="$(ls -t "$HOME"/.nvm/versions/node/*/bin/node | head -1)"
 SRC="${1:-$HOME/.fb-scratch/backup-desktop-note}"   # where the pristine pre-patch bytes live
 
@@ -23,21 +24,21 @@ export ASSETS="$WORK/assets"
 export FREEBUFF_PATCH_BACKUP="$WORK/backup"
 
 echo "== applying the repo patcher to a pristine bundle =="
-"$NODE" --experimental-vm-modules --no-warnings "$HERE/src/patch.mjs" || exit 1
+"$NODE" --experimental-vm-modules --no-warnings "$HERE/patch.mjs" || exit 1
 
 echo
 echo "== inspector.test.mjs =="
-"$NODE" --experimental-vm-modules --no-warnings "$HERE/test/inspector.test.mjs"
+"$NODE" --experimental-vm-modules --no-warnings "$TESTS/inspector.test.mjs"
 inspector=$?
 
 echo
 echo "== update-drill.mjs =="
-"$NODE" --experimental-vm-modules --no-warnings "$HERE/test/update-drill.mjs"
+"$NODE" --experimental-vm-modules --no-warnings "$TESTS/update-drill.mjs"
 drill=$?
 
 echo
 echo "== dom-fallback.test.mjs =="
-"$NODE" --experimental-vm-modules --no-warnings "$HERE/test/dom-fallback.test.mjs"
+"$NODE" --experimental-vm-modules --no-warnings "$TESTS/dom-fallback.test.mjs"
 fallback=$?
 
 echo

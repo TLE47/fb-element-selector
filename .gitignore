@@ -4,6 +4,7 @@ npm-debug.log*
 *.log
 .env
 .env.*
-# the plist is templated at install time; a substituted copy must never be committed
-launchd/*.local.plist
+# the plist is templated at install time; a substituted copy must never be committed.
+# src/launchd/ holds the template, so the pattern is anchored to the repo root.
+src/launchd/*.local.plist
 Library/
