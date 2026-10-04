@@ -142,6 +142,43 @@ try {
   }
   ok('drill: the patched bundle parses as an ES module', parseError === null, parseError)
 
+  // Every injected blob must survive the latin1 write. The patcher reads and writes latin1 so the
+  // untouched 99% of a UTF-8 bundle round-trips byte for byte - which means ANY non-ASCII character
+  // in injected code is silently corrupted: a bare 0xB7 for the middot (invalid UTF-8, so the
+  // browser shows a replacement character) and 0x15 for the cross (out of latin1 range entirely).
+  // Neither throws, and a screenshot is the only place you would notice.
+  // Bounded to the injected region ONLY, from the marker to the end of that blob - never to the end
+  // of the bundle. The app's own text is legitimately full of multi-byte UTF-8 (emoji, accents) and
+  // the latin1 round-trip preserves it byte for byte; scanning past our own code would flag the
+  // app's characters as if they were ours. The blobs are delimited by their own closing braces.
+  const blobEnd = (from, terminator) => {
+    const at = patched.indexOf(terminator, from)
+    return at < 0 ? '' : patched.slice(from, at + terminator.length)
+  }
+  const injectedBytes = [
+    blobEnd(patched.indexOf('function fbInspPick(on){'), 'return done}'),
+    // Tier 2 is appended last, so it runs to the end of the file.
+    patched.slice(patched.indexOf('/*fb-dom*/')),
+  ].filter(Boolean)
+  ok('drill: the injected code carries no non-ASCII bytes',
+    injectedBytes.every((seg) => seg !== '' && ![...seg].some((c) => c.codePointAt(0) > 0x7f)),
+    injectedBytes.map((s, i) => `${i}:${[...new Set([...s].filter((c) => c.codePointAt(0) > 0x7f))].join('')}`).join(' '))
+  // The escapes must arrive as six ASCII characters and be interpreted by the JS engine, so the
+  // bytes on disk are `c2 b7` - correct UTF-8 - not a bare `b7`. Checking the RAW BYTES is the
+  // whole point: read as latin1 the same bytes look like "Â·", which reads fine and would pass an
+  // assertion written against the decoded string. This is asserted on the buffer, not on `patched`.
+  {
+    const rawPatched = readFileSync(patchedPath)
+    // Locate the middot by what FOLLOWS it rather than by a hand-counted offset - "Esc to cancel"
+    // is unique to our hint and cannot drift if the text is ever reworded.
+    const escAt = rawPatched.indexOf('Esc to cancel')
+    const before = [...rawPatched.slice(escAt - 3, escAt)]
+    ok('drill: the middot reaches disk as valid UTF-8 (c2 b7), not a bare latin1 byte',
+      before[0] === 0xc2 && before[1] === 0xb7, before.map((b) => b.toString(16)).join(' '))
+  }
+  ok('drill: the app decode would not see a stray continuation byte',
+    !/[\x80-\xBF]/.test(injectedBytes.join('')), 'no lone UTF-8 continuation byte in injected code')
+
   const { EDITS } = await import('../src/patch.mjs')
   let restored = patched
   for (const edit of EDITS) restored = restored.replace(edit.to, edit.from)

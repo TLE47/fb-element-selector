@@ -154,6 +154,13 @@ ok('tier 2 cancels when its own button is clicked', dom.window.document.querySel
 // the idempotency marker tier 2 relies on
 ok('the marker main() checks for is present in tier 2', DOMFALLBACK.includes('function fbInspDom()'))
 
+// Tier 2 is the only tier with a cross glyph (tier 1 renders the app's own Icon), and it is the
+// one character that is OUT of latin1 range - so it would become a bare 0x15 on disk. It has to
+// reach the bundle as the six ASCII characters of the escape.
+ok('the cross glyph is written as an escape, not a literal character',
+  DOMFALLBACK.includes(String.raw`textContent="\u2715"`) &&
+  ![...DOMFALLBACK].some((c) => c.codePointAt(0) > 0x7f))
+
 // --- 4 a failed mount announces itself -----------------------------------------------------
 // This is the case nothing else can catch. A bundle that parses cleanly falls through both tiers
 // and exits 0, so exit codes, the log and the notification are ALL silent while the button is

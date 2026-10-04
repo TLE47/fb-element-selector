@@ -5,7 +5,7 @@
 [![Node 20+](https://img.shields.io/badge/node-20%2B-brightgreen)](#installation)
 [![Platform: macOS](https://img.shields.io/badge/platform-macOS-lightgrey)](#installation)
 [![No dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)](#installation)
-[![Tests: 113](https://img.shields.io/badge/tests-113-passing-brightgreen)](#tests)
+[![Tests: 117](https://img.shields.io/badge/tests-117-passing-brightgreen)](#tests)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](https://github.com/TLE47/fb-element-selector/blob/main/LICENSE)
 
 A DevTools-style element inspector for the [Freebuff](https://freebuff.com) desktop app. It adds a
@@ -115,8 +115,8 @@ Full detail, including the traps that cost real debugging time here, is in
 
 ```sh
 npm test              # 44 behaviour checks, jsdom + real React 19
-npm run test:update   # 35 durability checks against a simulated app update
-npm run test:fallback # 34 checks that tier 2 mounts, picks, and announces a failed mount
+npm run test:update   # 38 durability checks against a simulated app update
+npm run test:fallback # 35 checks that tier 2 mounts, picks, and announces a failed mount
 ```
 
 `npm test` lifts the inspector out of the **shipped bundle verbatim**, so it exercises the bytes

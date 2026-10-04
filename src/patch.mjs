@@ -79,6 +79,18 @@ const JS_FILE = () => (jsFile ??= entryAsset(/^index-[\w-]+\.js$/, 1_000_000))
 const CSS_FILE = () => (cssFile ??= entryAsset(/^index-[\w-]+\.css$/, 100_000))
 
 // latin1 round-trips bytes 1:1, so the untouched 99% of a UTF-8 bundle survives verbatim.
+//
+// The corollary is that ANY non-latin1 character in INJECTED code is corrupted on the way in -
+// and the app decodes the bundle as UTF-8, so even a latin1-range character is wrong when it
+// stands alone (`·` U+00B7 becomes a bare 0xB7, which is invalid UTF-8, and `✕` U+2715 is out of
+// latin1 range entirely and becomes 0x15). Both render as replacement characters in the UI.
+// So every non-ASCII character in the injected strings below is written as a \uXXXX escape: pure
+// ASCII on disk, correct glyph at runtime. `nonAsciiFree` below enforces it.
+const nonAsciiFree = (name, s) => {
+  const bad = [...new Set([...s].filter((c) => c.codePointAt(0) > 0x7f))]
+  if (bad.length) throw new Error(`${name} contains non-ASCII ${JSON.stringify(bad.join(''))}; write it as a \\uXXXX escape`)
+  return s
+}
 const read = (f) => readFileSync(f, 'latin1')
 const write = (f, s) => writeFileSync(f, Buffer.from(s, 'latin1'))
 
@@ -184,7 +196,7 @@ export const INSPECT =
   `d.jsx("button",{type:"button",className:b?"panel-add fb-inspect-btn on":"panel-add fb-inspect-btn",` +
   `"aria-label":b?"Cancel element selection":"Inspect an element in the app","aria-pressed":b,` +
   `title:b?"Esc also cancels":"Pick any element in Freebuff",onClick:toggle,children:d.jsx(le,{name:"inspect"})}),` +
-  `b?d.jsx("span",{className:"fb-inspect-hint",role:"status",children:"Click an element · Esc to cancel"}):null,` +
+  `b?d.jsx("span",{className:"fb-inspect-hint",role:"status",children:"Click an element \\u00b7 Esc to cancel"}):null,` +
   `out?d.jsxs("div",{className:"fb-inspect-out",children:[` +
   `d.jsx("input",{className:"fb-inspect-sel",readOnly:!0,value:out.sel,` +
   `onFocus:s=>s.target.select(),onClick:s=>s.target.select(),title:out.sel,` +
@@ -288,7 +300,7 @@ export const DOMFALLBACK =
   `armed=true;btn.classList.add("on");btn.setAttribute("aria-pressed","true");` +
   `hint=document.createElement("span");` +
   `hint.className="fb-inspect-hint";hint.setAttribute("role","status");` +
-  `hint.textContent="Click an element · Esc to cancel";` +
+  `hint.textContent="Click an element \\u00b7 Esc to cancel";` +
   `document.body.appendChild(hint);` +
   `cancel=fbInspPickD(function(el){teardown();` +
   `if(!el)return;` +
@@ -306,7 +318,7 @@ export const DOMFALLBACK =
   `status=document.createElement("span");status.className="fb-inspect-status";status.setAttribute("role","status");` +
   `var x=document.createElement("button");` +
   `x.type="button";x.className="fb-inspect-copy";x.title="Copy selector";` +
-  `x.setAttribute("aria-label","Copy selector and close");x.textContent="✕";` +
+  `x.setAttribute("aria-label","Copy selector and close");x.textContent="\\u2715";` +
   `x.addEventListener("click",function(ev){ev.stopPropagation();fbInspCopyD(sel).then(function(){teardown()})});` +
   `out.appendChild(inp);out.appendChild(meta);` +
   `wrap.appendChild(out);render();` +
@@ -352,7 +364,7 @@ export const DOMFALLBACK =
   `t.textContent="Element inspector could not mount - Freebuff's panel layout changed.";` +
   `var x=document.createElement("button");` +
   `x.type="button";x.className="fb-inspect-failed-x";x.title="Dismiss";` +
-  `x.setAttribute("aria-label","Dismiss this notice");x.textContent="✕";` +
+  `x.setAttribute("aria-label","Dismiss this notice");x.textContent="\\u2715";` +
   `x.addEventListener("click",function(){el.remove()});` +
   `el.appendChild(t);el.appendChild(x);` +
   `document.body.appendChild(el)}` +
@@ -406,6 +418,13 @@ export const CSS =
   `.fb-inspect-failed{position:fixed;right:16px;bottom:16px;z-index:2147483647;display:flex;align-items:center;gap:var(--space-2);max-width:min(420px,80vw);padding:8px 10px;border:1px solid var(--danger);border-radius:var(--radius-sm);background:var(--surface);box-shadow:0 8px 24px rgba(0,0,0,.28);color:var(--text);font-size:var(--font-size-label)}` +
   `.fb-inspect-failed-x{flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:20px;height:20px;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--muted);cursor:pointer}` +
   `.fb-inspect-failed-x:hover{background:var(--raised);color:var(--text)}`
+
+// Every injected blob is asserted ASCII at load time - a hard, immediate failure at import rather
+// than a replacement character nobody notices until they look at a screenshot. This sits after all
+// three definitions because a `const` cannot be read before it is initialised.
+for (const [name, blob] of [['INSPECT', INSPECT], ['DOMFALLBACK', DOMFALLBACK], ['CSS', CSS]]) {
+  nonAsciiFree(name, blob)
+}
 
 function backup(name, from) {
   mkdirSync(BACKUP, { recursive: true })

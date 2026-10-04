@@ -193,6 +193,39 @@ const renumbered = real
 The drill now asserts that its fixture parses before using it, so it cannot quietly regress into
 testing the parse-guard path again — which is the only way this class of mistake stays fixed.
 
+### Non-ASCII in injected code is silently corrupted
+
+The patcher reads and writes **latin1** so the untouched 99% of a UTF-8 bundle round-trips byte for
+byte. The corollary is that any non-ASCII character in *injected* code is mangled on the way in:
+
+| Written as | Becomes on disk | Result in the app |
+|---|---|---|
+| `·` U+00B7 | a bare `b7` | invalid UTF-8 → replacement character |
+| `✕` U+2715 | `15` | out of latin1 range entirely → not even a character |
+
+Nothing throws. The parse guard passes, the drill passes, and the only symptom is a wrong glyph in
+a screenshot. So every non-ASCII character is written as a `\\uXXXX` escape — ASCII on disk,
+correct glyph once the JS engine reads it — and all three blobs are asserted ASCII at load:
+
+```js
+for (const [name, blob] of [['INSPECT', INSPECT], ['DOMFALLBACK', DOMFALLBACK], ['CSS', CSS]]) {
+  nonAsciiFree(name, blob)   // throws on import, naming the blob and the character
+}
+```
+
+The subtlety is that this is a **template literal**, so `\\u00b7` is itself an escape and is
+consumed at patch time. Emitting the six ASCII characters the bundle needs takes a *double* escape,
+`\\\\u00b7`. The first attempt got this wrong and the guard caught it on the next run — which is the
+argument for having the guard rather than a code review.
+
+Verification asserts on **bytes**, not decoded text, because read as latin1 the correct `c2 b7`
+looks like `Â·` and an assertion written against the decoded string would pass on corrupted output:
+
+```js
+const before = [...raw.slice(escAt - 3, escAt)]
+before[0] === 0xc2 && before[1] === 0xb7
+```
+
 ### Check the precondition before you use it
 
 Three of the bugs above had the same shape: a value read at module scope, before any guard could
