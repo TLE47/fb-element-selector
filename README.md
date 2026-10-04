@@ -32,7 +32,7 @@ The clip is the real app, unedited: the magnifier is armed in the tab strip, the
 into a crosshair, hovering outlines an element and labels it `tag.classes WxH`, and the click
 both resolves the selector and copies it. Nothing here is a mock-up.
 
-It ships as **lossless animated WebP**, not video and not GIF — a Markdown page renders an image
+> It ships as **lossless animated WebP**, not video and not GIF — a Markdown page renders an image
 pixel for pixel, where a video would be decoded through a codec behind a poster frame and a play
 button. See [docs/demo](https://github.com/TLE47/fb-element-selector/blob/main/docs/demo/README.md)
 for the toolchain and the numbers.
