@@ -37,9 +37,11 @@
 // Exit codes: 0 ok · 1 not patched (or, with --check, already patched) · 2 anchors gone,
 // nothing written · 3 the patched bundle would not parse, nothing written.
 
-import { readdirSync, readFileSync, writeFileSync, mkdirSync, copyFileSync, renameSync, existsSync, statSync } from 'node:fs'
+import { readdirSync, readFileSync, writeFileSync, mkdirSync, copyFileSync, renameSync, existsSync, statSync, realpathSync } from 'node:fs'
+import * as fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
+import url from 'node:url'
 
 const ASSETS =
   process.env.ASSETS || '/Applications/Freebuff.app/Contents/Resources/orchestrator/ui/assets'
@@ -340,7 +342,14 @@ async function main() {
 }
 
 // Imported by the tests for the edit table, so only this file decides what the patch is.
-if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
+//
+// The comparison resolves symlinks on BOTH sides. Without that it silently fails whenever the
+// repo sits under a symlinked path - and on macOS /var is a symlink to /private/var, so running
+// this from a mktemp -d directory made import.meta.url ("file:///private/var/...") differ from
+// process.argv[1] ("/var/..."). The effect was the worst kind of failure: main() never ran and
+// the script exited 0 having done nothing, so a clone in /tmp reported a successful patch that
+// had not happened.
+if (process.argv[1] && import.meta.url === url.pathToFileURL(realpathSync(process.argv[1])).href) {
   try {
     process.exitCode = await main()
   } catch (error) {

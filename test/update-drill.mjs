@@ -14,7 +14,7 @@
 //
 // USAGE  node --experimental-vm-modules test/update-drill.mjs
 
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import path from 'node:path'
 import os from 'node:os'
@@ -210,6 +210,30 @@ try {
   // its backup directory. It is the check that would have caught the bug this harness once had.
   ok('drill: the installed app index.html was not modified', readFileSync(realIndexHtml, 'utf8') === realIndexBefore)
   ok('drill: the real backup directory was not modified', readdirSync(realBackupDir).sort().join(',') === realBackupBefore)
+
+  // 10. The entry-point guard must work from a SYMLINKED path. On macOS /var is a symlink to
+  //     /private/var, so `mktemp -d` hands out a path that differs from import.meta.url. When
+  //     the guard compared them verbatim, main() never ran and the script exited 0 having done
+  //     nothing - a no-op that looks like success. This is the regression test for that.
+  const linkWork = mkdtempSync(path.join(os.tmpdir(), 'fb-es-symlink-'))
+  try {
+    mkdirSync(path.join(linkWork, 'assets'), { recursive: true })
+    cpSync(path.join(BACKUP, pristineJs), path.join(linkWork, 'assets', 'index-LINK01.js'))
+    cpSync(path.join(BACKUP, pristineCss), path.join(linkWork, 'assets', 'index-LINK01.css'))
+    writeFileSync(path.join(linkWork, 'index.html'), '<link rel="stylesheet" href="/assets/index-LINK01.css"><script type="module" src="/assets/index-LINK01.js">')
+    const patchedVia = path.join(linkWork, 'assets', 'index-LINK01-fb-inspect.js')
+    const out = execFileSync(process.execPath, ['--experimental-vm-modules', '--no-warnings', patcher], {
+      env: { ...process.env, ASSETS: path.join(linkWork, 'assets'), FREEBUFF_PATCH_BACKUP: path.join(linkWork, 'backup') },
+      encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    const outText = `${out}${''}`
+    ok('drill: the patcher actually runs from a symlinked path (mktemp on macOS)', existsSync(patchedVia), outText.slice(0, 120))
+    if (existsSync(patchedVia)) {
+      ok('drill: and what it wrote there is the real patch', readFileSync(patchedVia, 'latin1').includes('function fbInspPick(on){'))
+    }
+  } finally {
+    rmSync(linkWork, { recursive: true, force: true })
+  }
 } finally {
   rmSync(work, { recursive: true, force: true })
 }
