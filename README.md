@@ -98,7 +98,7 @@ injection point: `k` (React), `d` (the jsx runtime) and `le` (the app's Icon com
 
 ```bash
 npm test              # behaviour: 34 checks in jsdom with real React 19
-npm run test:update   # durability: 25 checks against a simulated app update
+npm run test:update   # durability: 27 checks against a simulated app update
 ```
 
 Both suites read the **installed** app, so run them after `node src/patch.mjs`. To verify the
@@ -136,6 +136,10 @@ These are all things that cost real debugging time here:
 - **A test harness that can write to production state is not a harness.** A hardcoded backup path
   in the patcher meant a staged fake release overwrote the real `index.html`, leaving the app
   serving a URL that did not exist. Make every path overridable and assert isolation.
+- **Resolve symlinks when comparing `import.meta.url` to `process.argv[1]`.** On macOS `/var`
+  is a symlink to `/private/var`, so the two differ for any path under `/tmp`. Comparing them
+  verbatim makes the entry-point guard silently skip `main()` and exit 0 having done nothing —
+  a failed patch that reports success.
 
 ## Requirements
 
