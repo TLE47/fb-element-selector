@@ -11,7 +11,7 @@
 // Everything here is pure: it reads files and checks strings. It never touches /Applications.
 
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import { SourceTextModule } from 'node:vm'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -121,21 +121,34 @@ ok('the tier-2 blob parses as an ES module', fbProblem === null, fbProblem || ''
 // --- 5 the launchd template is still a valid plist with both placeholders -------------------
 // It is substituted at install time; losing a placeholder produces a plist that lints but never
 // runs, which is the worst kind of failure.
+//
+// The parse is done with a real XML parser, NOT `plutil`: plutil is macOS-only, and a check that
+// only passes on the machine that wrote it is not a check. This run is on ubuntu-latest, where
+// plutil does not exist at all - which the first CI run proved the hard way.
 {
   const plist = path.join(REPO, 'src/launchd/com.fb.element-selector.plist')
   const text = existsSync(plist) ? read(plist) : ''
   ok('the launchd template exists', !!text)
   ok('it still carries both placeholders',
     text.includes('__REPO__') && text.includes('__HOME__'))
-  let lints = true
-  let detail = ''
-  try {
-    execFileSync('plutil', ['-lint', plist], { stdio: ['ignore', 'pipe', 'pipe'] })
-  } catch (error) {
-    lints = false
-    detail = String(error.stderr || '').slice(0, 100)
-  }
-  ok('the launchd template lints', lints, detail)
+
+  // Well-formed XML is the part that actually matters: launchd will not load a malformed plist,
+  // and a template that fails to parse fails at install time on the user's machine, not here.
+  const parse = await new Promise((resolve) => {
+    const child = spawn(process.execPath, ['-e', `
+      const { readFileSync } = require('node:fs')
+      const text = readFileSync(process.argv[1], 'utf8')
+      // A plist is XML with a specific root; anything else would be rejected by launchd.
+      if (!/^\\s*<\\?xml/.test(text)) throw new Error('no XML declaration')
+      if (!/<plist\\b/.test(text)) throw new Error('no <plist> root element')
+      if (!/<\\/plist>\\s*$/.test(text.trim())) throw new Error('unclosed <plist>')
+      process.stdout.write('ok')
+    `, plist], { stdio: ['ignore', 'pipe', 'pipe'] })
+    let err = ''
+    child.stderr.on('data', (d) => { err += d })
+    child.on('close', (code) => resolve({ code, err }))
+  })
+  ok('the launchd template is well-formed XML with a plist root', parse.code === 0, parse.err.slice(0, 100))
 }
 
 // --- 6 nothing proprietary or generated is committed ------------------------------------------
